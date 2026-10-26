@@ -1,6 +1,7 @@
 // Chạy OpenCASCADE trong Web Worker để trang không bị đơ
 importScripts('oc.js');
 let ocPromise = null;
+
 function getOC() {
     if (!ocPromise) ocPromise = new opencascade({ locateFile: f => f.endsWith('.wasm') ? 'oc.wasm' : 'oc.wasm' });
     return ocPromise;
@@ -25,9 +26,10 @@ function parseSTL(buf) {
 }
 
 onmessage = async (e) => {
-    // Nhận thêm biến autoRepair từ index.html gửi sang
-    const { buffer, tol, refine, autoRepair } = e.data;
+    // Đồng bộ nhận biến repairMesh từ index.html
+    const { buffer, tol, refine, repairMesh } = e.data;
     const say = (msg) => postMessage({ type: 'status', msg });
+    
     try {
         say('Đang nạp OpenCASCADE (lần đầu ~60 MB)...');
         const oc = await getOC();
@@ -38,12 +40,11 @@ onmessage = async (e) => {
 
         let skippedCount = 0;
 
-        // Xử lý tự động lọc lưới / vá lỗi nếu checkbox được bật
-        if (autoRepair) {
+        // Xử lý tự động lọc tam giác suy biến nếu checkbox được bật
+        if (repairMesh) {
             say('Đang tự động kiểm tra và làm sạch lưới STL...');
             tris = tris.filter(tri => {
                 const [p1, p2, p3] = tri;
-                // Kiểm tra tam giác suy biến (các đỉnh trùng nhau, diện tích = 0)
                 const isDegenerate = 
                     (p1[0] === p2[0] && p1[1] === p2[1] && p1[2] === p2[2]) ||
                     (p2[0] === p3[0] && p2[1] === p3[1] && p2[2] === p3[2]) ||
@@ -53,16 +54,78 @@ onmessage = async (e) => {
             });
         }
 
-        // --- Từ đoạn này trở xuống là logic dựng hình OpenCASCADE cũ của bạn ---
         say('Đang xây dựng mô hình B-rep...');
         
-        // Tạo các builder OpenCASCADE để chuyển danh sách tam giác thành file STEP
         const builder = new oc.BRep_Builder();
-        const comp = new oc.TopoDS_Compound();
-        builder.MakeCompound(comp);
+        const compound = new oc.TopoDS_Compound();
+        builder.MakeCompound(compound);
 
         let facesCount = 0;
-        // (Giữ nguyên phần thuật toán tạo mặt phẳng / gộp mặt phía dưới theo mã nguồn gốc của bạn...)
+        for (let i = 0; i < tris.length; i++) {
+            const t = tris[i];
+            const p1 = new oc.gp_Pnt(t[0][0], t[0][1], t[0][2]);
+            const p2 = new oc.gp_Pnt(t[1][0], t[1][1], t[1][2]);
+            const p3 = new oc.gp_Pnt(t[2][0], t[2][1], t[2][2]);
+            
+            if (p1.IsEqual(p2, 1e-7) || p2.IsEqual(p3, 1e-7) || p3.IsEqual(p1, 1e-7)) {
+                skippedCount++;
+                continue;
+            }
+
+            try {
+                const mkFace = new oc.BRepBuilderAPI_MakeFace(p1, p2, p3);
+                if (mkFace.IsDone()) {
+                    const face = mkFace.Face();
+                    builder.Add(compound, face);
+                    facesCount++;
+                }
+                mkFace.delete();
+            } catch (err) {
+                skippedCount++;
+            }
+
+            p1.delete(); p2.delete(); p3.delete();
+        }
+
+        let finalShape = compound;
+        if (refine) {
+            say('Đang gộp các mặt đồng phẳng...');
+            const mkShapePr = new oc.ShapeUpgrade_UnifySameDomain(compound, true, true, false);
+            mkShapePr.Build();
+            finalShape = mkShapePr.Shape();
+        }
+
+        let isSolid = false;
+        try {
+            const s = new oc.BRepBuilderAPI_MakeSolid(oc.TopoDS.ToShell(finalShape));
+            if (s.IsDone()) isSolid = true;
+            s.delete();
+        } catch (e) {}
+
+        say('Đang xuất file STEP...');
+        const writer = new oc.STEPControl_Writer();
+        writer.Transfer(finalShape, oc.STEPControl_StepModelType.StepControl_AsIs, true, new oc.Message_ProgressRange());
+        
+        const tempPath = 'output.step';
+        writer.Write(tempPath);
+
+        let stepData;
+        try {
+            stepData = oc.FS.readFile(tempPath);
+        } catch(ex) {
+            stepData = new Uint8Array(0);
+        }
+
+        postMessage({
+            type: 'done',
+            data: stepData.buffer,
+            info: {
+                triangles: tris.length,
+                faces: facesCount,
+                solid: isSolid,
+                skipped: skippedCount
+            }
+        });
 
     } catch (err) {
         postMessage({ type: 'error', msg: err.message });
