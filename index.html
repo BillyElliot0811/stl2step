@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>STL → STEP</title>
+<style>
+  :root { --bg:#fff; --fg:#1a1a1a; --mut:#666; --bd:#d0d0d0; --acc:#1f4e78; --box:#f6f8fa; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#16181b; --fg:#e8e8e8; --mut:#9aa; --bd:#3a3f45; --acc:#6aa9e0; --box:#1e2125; } }
+  body { font-family: Arial, sans-serif; background:var(--bg); color:var(--fg); max-width:640px; margin:40px auto; padding:0 16px; }
+  h1 { font-size:22px; margin-bottom:4px; } p.sub { color:var(--mut); margin-top:0; }
+  #drop { border:2px dashed var(--bd); border-radius:10px; padding:36px 16px; text-align:center; background:var(--box); cursor:pointer; }
+  #drop.over { border-color:var(--acc); }
+  .row { display:flex; gap:16px; align-items:center; margin:14px 0; flex-wrap:wrap; }
+  label { font-size:14px; } input[type=number] { width:90px; }
+  button { background:var(--acc); color:#fff; border:0; border-radius:6px; padding:9px 18px; font-size:15px; cursor:pointer; }
+  button:disabled { opacity:.5; cursor:default; }
+  #log { font-size:14px; background:var(--box); border:1px solid var(--bd); border-radius:8px; padding:10px 12px; min-height:20px; white-space:pre-wrap; }
+  .note { font-size:13px; color:var(--mut); margin-top:18px; line-height:1.5; }
+</style>
+</head>
+<body>
+<h1>Chuyển STL → STEP</h1>
+<p class="sub">Chạy hoàn toàn trong trình duyệt. File của bạn không được gửi lên máy chủ nào.</p>
+
+<div id="drop">Kéo thả file .stl vào đây hoặc bấm để chọn<input id="file" type="file" accept=".stl" hidden></div>
+
+<div class="row">
+  <label>Dung sai khâu (mm) <input id="tol" type="number" value="0.0001" step="0.0001" min="0.00001"></label>
+  <label><input id="refine" type="checkbox" checked> Gộp mặt đồng phẳng</label>
+</div>
+<div class="row"><button id="go" disabled>Chuyển sang STEP</button> <a id="dl" style="display:none"></a></div>
+<div id="log">Chưa chọn file.</div>
+
+<p class="note">
+  Kết quả là mô hình B-rep với các mặt phẳng (đã gộp các tam giác đồng phẳng), mở được trong SolidWorks, Fusion, FreeCAD.
+  Mặt cong (lỗ tròn, mặt trụ) vẫn là nhiều mặt phẳng nhỏ, chưa phải mặt trụ thật, nên không sửa được kích thước tham số.
+  STL cần kín (watertight) thì mới ra solid; nếu không sẽ ra tập hợp các mặt (shell).
+</p>
+
+<script>
+const $ = id => document.getElementById(id);
+let buffer = null, name = 'model', worker = null;
+const log = t => $('log').textContent = t;
+
+function pick(f) {
+  if (!f) return;
+  name = f.name.replace(/\.stl$/i, '');
+  f.arrayBuffer().then(b => { buffer = b; $('go').disabled = false; log(`Đã chọn: ${f.name} (${(b.byteLength/1048576).toFixed(2)} MB)`); });
+}
+$('drop').onclick = () => $('file').click();
+$('file').onchange = e => pick(e.target.files[0]);
+$('drop').ondragover = e => { e.preventDefault(); $('drop').classList.add('over'); };
+$('drop').ondragleave = () => $('drop').classList.remove('over');
+$('drop').ondrop = e => { e.preventDefault(); $('drop').classList.remove('over'); pick(e.dataTransfer.files[0]); };
+
+$('go').onclick = () => {
+  if (!buffer) return;
+  $('go').disabled = true; $('dl').style.display = 'none';
+  worker = worker || new Worker('worker.js');
+  worker.onmessage = ev => {
+    const m = ev.data;
+    if (m.type === 'status') log(m.msg);
+    else if (m.type === 'error') { log('Lỗi: ' + m.msg); $('go').disabled = false; }
+    else if (m.type === 'done') {
+      const i = m.info;
+      log(`Xong. ${i.triangles.toLocaleString()} tam giác → ${i.faces.toLocaleString()} mặt, ` +
+          (i.solid ? 'solid kín.' : 'chưa kín (chỉ là shell, STL có thể bị hở).') +
+          (i.skipped ? ` Bỏ qua ${i.skipped} tam giác suy biến.` : ''));
+      const url = URL.createObjectURL(new Blob([m.data], { type: 'application/step' }));
+      const a = $('dl'); a.href = url; a.download = name + '.step'; a.textContent = `Tải ${name}.step`; a.style.display = 'inline';
+      $('go').disabled = false;
+    }
+  };
+  worker.postMessage({ buffer: buffer.slice(0), tol: parseFloat($('tol').value) || 1e-4, refine: $('refine').checked });
+};
+</script>
+</body>
+</html>
