@@ -63,9 +63,9 @@ onmessage = async (e) => {
         let facesCount = 0;
         for (let i = 0; i < tris.length; i++) {
             const t = tris[i];
-            const p1 = new oc.gp_Pnt(t[0][0], t[0][1], t[0][2]);
-            const p2 = new oc.gp_Pnt(t[1][0], t[1][1], t[1][2]);
-            const p3 = new oc.gp_Pnt(t[2][0], t[2][1], t[2][2]);
+            const p1 = new oc.gp_Pnt(); p1.SetCoord(t[0][0], t[0][1], t[0][2]);
+            const p2 = new oc.gp_Pnt(); p2.SetCoord(t[1][0], t[1][1], t[1][2]);
+            const p3 = new oc.gp_Pnt(); p3.SetCoord(t[2][0], t[2][1], t[2][2]);
             
             if (p1.IsEqual(p2, 1e-7) || p2.IsEqual(p3, 1e-7) || p3.IsEqual(p1, 1e-7)) {
                 skippedCount++;
