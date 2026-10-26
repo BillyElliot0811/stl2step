@@ -22,16 +22,18 @@
 <body>
 <h1>Chuyển STL → STEP</h1>
 <p class="sub">Chạy hoàn toàn trong trình duyệt. File của bạn không được gửi lên máy chủ nào.</p>
-<label style="display: block; margin-top: 10px;">
-    <input type="checkbox" id="repairMesh" checked> Tự động vá lỗ hổng (Hole Filling) trước khi chuyển đổi sang STEP
+
+<label style="display: block; margin: 12px 0;">
+    <input type="checkbox" id="repairMesh" checked> Tự động kiểm tra và làm sạch lưới STL (Lọc tam giác lỗi)
 </label>
+
 <div id="drop">Kéo thả file .stl vào đây hoặc bấm để chọn<input id="file" type="file" accept=".stl" hidden></div>
 
 <div class="row">
   <label>Dung sai khâu (mm) <input id="tol" type="number" value="0.0001" step="0.0001" min="0.00001"></label>
   <label><input id="refine" type="checkbox" checked> Gộp mặt đồng phẳng</label>
 </div>
-<input type="checkbox" id="autoRepair">
+
 <div class="row"><button id="go" disabled>Chuyển sang STEP</button> <a id="dl" style="display:none"></a></div>
 <div id="log">Chưa chọn file.</div>
 
@@ -75,7 +77,14 @@ $('go').onclick = () => {
       $('go').disabled = false;
     }
   };
-  worker.postMessage({ buffer: buffer.slice(0), tol: parseFloat($('tol').value) || 1e-4, refine: $('refine').checked });
+  
+  // Truyền đủ các tham số bao gồm cả trạng thái của checkbox repairMesh
+  worker.postMessage({ 
+      buffer: buffer.slice(0), 
+      tol: parseFloat($('tol').value) || 1e-4, 
+      refine: $('refine').checked,
+      repairMesh: $('repairMesh').checked 
+  });
 };
 </script>
 </body>
