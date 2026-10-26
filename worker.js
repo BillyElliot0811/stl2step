@@ -23,14 +23,32 @@ function parseSTL(buf) {
   return tris;
 }
 onmessage = async (e) => {
-  const { buffer, tol, refine } = e.data;
+  const { buffer, tol, refine, autoRepair } = e.data;
   const say = (msg) => postMessage({ type: 'status', msg });
   try {
-    say('Đang nạp OpenCASCADE (lần đầu ~60 MB)...');
-    const oc = await getOC();
-    say('Đang đọc STL...');
-    const tris = parseSTL(buffer);
-    if (!tris.length) throw new Error('Không đọc được tam giác nào. File có đúng định dạng STL không?');
+  say('Đang nạp OpenCASCADE (lần đầu ~60 MB)...');
+  const oc = await getOC();
+  say('Đang đọc STL...');
+        
+  let tris = parseSTL(buffer); // <-- 2. Đổi từ const thành let
+        if (!tris.length) throw new Error('Không đọc được tam giác nào. File có đúng định dạng STL không?');
+
+        // ==========================================
+        // CHÈN BƯỚC XỬ LÝ / VÁ LỖ (B1) Ở ĐÂY:
+        // ==========================================
+        if (autoRepair) {
+            say('Đang tự động kiểm tra và làm sạch lưới STL...');
+            // Lọc bỏ các tam giác lỗi / trùng lặp diện tích = 0
+            tris = tris.filter(tri => {
+                // Kiểm tra 3 đỉnh của tam giác có bị trùng nhau không
+                const [p1, p2, p3] = tri;
+                const isDegenerate = 
+                    (p1[0] === p2[0] && p1[1] === p2[1] && p1[2] === p2[2]) ||
+                    (p2[0] === p3[0] && p2[1] === p3[1] && p2[2] === p3[2]) ||
+                    (p1[0] === p3[0] && p1[1] === p3[1] && p1[2] === p3[2]);
+                return !isDegenerate;
+            });
+        }
     say(`Đang dựng ${tris.length.toLocaleString()} mặt và khâu lại...`);
     const sew = new oc.BRepBuilderAPI_Sewing(tol, true, true, true, false);
     let skipped = 0;
