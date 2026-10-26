@@ -26,7 +26,6 @@ function parseSTL(buf) {
 }
 
 onmessage = async (e) => {
-    // Đồng bộ nhận biến repairMesh từ index.html
     const { buffer, tol, refine, repairMesh } = e.data;
     const say = (msg) => postMessage({ type: 'status', msg });
     
@@ -40,7 +39,6 @@ onmessage = async (e) => {
 
         let skippedCount = 0;
 
-        // Xử lý tự động lọc tam giác suy biến nếu checkbox được bật
         if (repairMesh) {
             say('Đang tự động kiểm tra và làm sạch lưới STL...');
             tris = tris.filter(tri => {
@@ -63,12 +61,15 @@ onmessage = async (e) => {
         let facesCount = 0;
         for (let i = 0; i < tris.length; i++) {
             const t = tris[i];
+            
+            // Sửa lỗi khởi tạo gp_Pnt bằng cách dùng SetCoord an toàn
             const p1 = new oc.gp_Pnt(); p1.SetCoord(t[0][0], t[0][1], t[0][2]);
             const p2 = new oc.gp_Pnt(); p2.SetCoord(t[1][0], t[1][1], t[1][2]);
             const p3 = new oc.gp_Pnt(); p3.SetCoord(t[2][0], t[2][1], t[2][2]);
             
             if (p1.IsEqual(p2, 1e-7) || p2.IsEqual(p3, 1e-7) || p3.IsEqual(p1, 1e-7)) {
                 skippedCount++;
+                p1.delete(); p2.delete(); p3.delete();
                 continue;
             }
 
