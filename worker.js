@@ -1,134 +1,193 @@
-// Chạy OpenCASCADE trong Web Worker để trang không bị đơ
-importScripts('oc.js');
-let ocPromise = null;
-
-function getOC() {
-    if (!ocPromise) ocPromise = new opencascade({ locateFile: f => f.endsWith('.wasm') ? 'oc.wasm' : 'oc.wasm' });
-    return ocPromise;
-}
-
-function parseSTL(buf) {
-    const dv = new DataView(buf), tris = [];
-    const isBin = buf.byteLength === 84 + 50 * dv.getUint32(80, true);
-    if (isBin) {
-        const n = dv.getUint32(80, true);
-        for (let i = 0; i < n; i++) {
-            const o = 84 + i * 50 + 12, t = [];
-            for (let k = 0; k < 3; k++) t.push([dv.getFloat32(o + k*12, true), dv.getFloat32(o + k*12 + 4, true), dv.getFloat32(o + k*12 + 8, true)]);
-            tris.push(t);
-        }
-    } else {
-        const s = new TextDecoder().decode(buf), re = /vertex\s+(\S+)\s+(\S+)\s+(\S+)/g;
-        let m, v = [];
-        while ((m = re.exec(s)) !== null) { v.push([+m[1], +m[2], +m[3]]); if (v.length === 3) { tris.push(v); v = []; } }
-    }
-    return tris;
-}
-
-onmessage = async (e) => {
-    const { buffer, tol, refine, repairMesh } = e.data;
-    const say = (msg) => postMessage({ type: 'status', msg });
-    
+/* OpenCASCADE.js 1.1.1 bindings: keep the numbered overloads in sync with oc.js. */
+'use strict';
+let busy = false;
+onmessage = async ({data:job}) => {
+  if (!job || job.type !== 'convert' || busy) return;
+  busy = true;
+  const id = job.id;
+  const say = msg => postMessage({type:'status',id,msg});
+  const owned = new Set();
+  const keep = value => { owned.add(value); return value; };
+  const dispose = (...items) => { for (const item of items.reverse()) { if (item) { try { item.delete(); } catch {} } } };
+  let oc;
+  // Keep a fixed short MEMFS name for the bundled 1.1.1 string bindings.
+  // The user-facing filename is applied to the Blob download in app.js.
+  const outputPath = '/out.step';
+  try {
+    say('Đang kiểm tra file STL…');
+    importScripts('stl.js?v=20261027');
+    const tol = job.tol;
+    if (typeof tol !== 'number' || !Number.isFinite(tol) || tol < 1e-7 || tol > 1) throw new Error('Dung sai phải từ 0,0000001 đến 1 mm.');
+    const parsed = STL.parse(job.buffer, Boolean(job.repairMesh));
+    // Parsing precedes the large WASM load so invalid input fails quickly.
+    job.buffer = null;
+    const warnings = [];
+    if (parsed.skipped) warnings.push('Đã loại ' + parsed.skipped.toLocaleString('vi-VN') + ' tam giác suy biến hoặc trùng lặp.');
+    say('Đang nạp bộ chuyển đổi (oc.wasm khoảng 63 MiB ở lần đầu)…');
+    importScripts('oc.js');
+    // Fetch explicitly: this older Emscripten loader can leave its ready
+    // Promise pending on an HTTP/network error.
+    const controller = new AbortController();
+    const loadTimeout = setTimeout(() => controller.abort(),90000);
+    let wasmBinary;
     try {
-        say('Đang nạp OpenCASCADE (lần đầu ~60 MB)...');
-        const oc = await getOC();
-        say('Đang đọc STL...');
-        
-        let tris = parseSTL(buffer);
-        if (!tris.length) throw new Error('Không đọc được tam giác nào. File có đúng định dạng STL không?');
-
-        let skippedCount = 0;
-
-        if (repairMesh) {
-            say('Đang tự động kiểm tra và làm sạch lưới STL...');
-            tris = tris.filter(tri => {
-                const [p1, p2, p3] = tri;
-                const isDegenerate = 
-                    (p1[0] === p2[0] && p1[1] === p2[1] && p1[2] === p2[2]) ||
-                    (p2[0] === p3[0] && p2[1] === p3[1] && p2[2] === p3[2]) ||
-                    (p1[0] === p3[0] && p1[1] === p3[1] && p1[2] === p3[2]);
-                if (isDegenerate) skippedCount++;
-                return !isDegenerate;
-            });
-        }
-
-        say('Đang xây dựng mô hình B-rep...');
-        
-        const builder = new oc.BRep_Builder();
-        const compound = new oc.TopoDS_Compound();
-        builder.MakeCompound(compound);
-
-        let facesCount = 0;
-        for (let i = 0; i < tris.length; i++) {
-            const t = tris[i];
-            
-            // Sửa lỗi khởi tạo gp_Pnt bằng cách dùng SetCoord an toàn
-            const p1 = new oc.gp_Pnt(); p1.SetCoord(t[0][0], t[0][1], t[0][2]);
-            const p2 = new oc.gp_Pnt(); p2.SetCoord(t[1][0], t[1][1], t[1][2]);
-            const p3 = new oc.gp_Pnt(); p3.SetCoord(t[2][0], t[2][1], t[2][2]);
-            
-            if (p1.IsEqual(p2, 1e-7) || p2.IsEqual(p3, 1e-7) || p3.IsEqual(p1, 1e-7)) {
-                skippedCount++;
-                p1.delete(); p2.delete(); p3.delete();
-                continue;
-            }
-
-            try {
-                const mkFace = new oc.BRepBuilderAPI_MakeFace(p1, p2, p3);
-                if (mkFace.IsDone()) {
-                    const face = mkFace.Face();
-                    builder.Add(compound, face);
-                    facesCount++;
-                }
-                mkFace.delete();
-            } catch (err) {
-                skippedCount++;
-            }
-
-            p1.delete(); p2.delete(); p3.delete();
-        }
-
-        let finalShape = compound;
-        if (refine) {
-            say('Đang gộp các mặt đồng phẳng...');
-            const mkShapePr = new oc.ShapeUpgrade_UnifySameDomain(compound, true, true, false);
-            mkShapePr.Build();
-            finalShape = mkShapePr.Shape();
-        }
-
-        let isSolid = false;
-        try {
-            const s = new oc.BRepBuilderAPI_MakeSolid(oc.TopoDS.ToShell(finalShape));
-            if (s.IsDone()) isSolid = true;
-            s.delete();
-        } catch (e) {}
-
-        say('Đang xuất file STEP...');
-        const writer = new oc.STEPControl_Writer();
-        writer.Transfer(finalShape, oc.STEPControl_StepModelType.StepControl_AsIs, true, new oc.Message_ProgressRange());
-        
-        const tempPath = 'output.step';
-        writer.Write(tempPath);
-
-        let stepData;
-        try {
-            stepData = oc.FS.readFile(tempPath);
-        } catch(ex) {
-            stepData = new Uint8Array(0);
-        }
-
-        postMessage({
-            type: 'done',
-            data: stepData.buffer,
-            info: {
-                triangles: tris.length,
-                faces: facesCount,
-                solid: isSolid,
-                skipped: skippedCount
-            }
-        });
-
+      const response = await fetch(new URL('oc.wasm',self.location.href),{signal:controller.signal});
+      if (!response.ok) throw new Error('Không tải được oc.wasm (HTTP ' + response.status + '). Kiểm tra file thư viện trên máy chủ.');
+      wasmBinary = await response.arrayBuffer();
+      const header = new Uint8Array(wasmBinary,0,Math.min(4,wasmBinary.byteLength));
+      if (header.length !== 4 || header[0] !== 0 || header[1] !== 97 || header[2] !== 115 || header[3] !== 109) throw new Error('oc.wasm bị hỏng hoặc máy chủ trả về nội dung khác. Hãy khôi phục đúng file thư viện.');
     } catch (err) {
-        postMessage({ type: 'error', msg: err.message });
+      if (controller.signal.aborted) throw new Error('Nạp bộ chuyển đổi quá 90 giây. Kiểm tra kết nối và thử lại.');
+      if (err instanceof TypeError) throw new Error('Không tải được oc.wasm. Kiểm tra kết nối và các file thư viện rồi thử lại.');
+      throw err;
+    } finally { clearTimeout(loadTimeout); }
+    let initTimeout;
+    try {
+      oc = await new Promise((resolve,reject) => {
+        initTimeout = setTimeout(() => reject(new Error('Không khởi tạo được bộ chuyển đổi trong 45 giây. Hãy thử lại hoặc dùng trình duyệt khác.')),45000);
+        opencascade({
+          wasmBinary,
+          locateFile: file => new URL(file.endsWith('.wasm') ? 'oc.wasm' : file, self.location.href).href,
+          onAbort: () => reject(new Error('Bộ chuyển đổi dừng khi khởi tạo. Kiểm tra oc.js/oc.wasm hoặc thử file nhỏ hơn.')),
+          print: () => {}, printErr: () => {}
+        }).then(resolve,reject);
+      });
+    } finally { clearTimeout(initTimeout); wasmBinary = null; }
+    const types = oc.TopAbs_ShapeEnum;
+    function parts(shape, type, avoid = types.TopAbs_SHAPE) {
+      const list = [], explorer = new oc.TopExp_Explorer_2(shape,type,avoid);
+      try { while (explorer.More()) { list.push(keep(explorer.Current())); explorer.Next(); } }
+      finally { explorer.delete(); }
+      return list;
     }
+    function count(shape, type) {
+      let n = 0;
+      const explorer = new oc.TopExp_Explorer_2(shape,type,types.TopAbs_SHAPE);
+      try { while (explorer.More()) { n++; explorer.Next(); } }
+      finally { explorer.delete(); }
+      return n;
+    }
+    function valid(shape) {
+      const check = new oc.BRepCheck_Analyzer(shape,true);
+      try { return check.IsValid_2(); } finally { check.delete(); }
+    }
+    function bounds(shape) {
+      const min = [Infinity,Infinity,Infinity], max = [-Infinity,-Infinity,-Infinity];
+      const explorer = new oc.TopExp_Explorer_2(shape,types.TopAbs_VERTEX,types.TopAbs_SHAPE);
+      try {
+        while (explorer.More()) {
+          let current,vertex,p;
+          try {
+            current = explorer.Current(); vertex = oc.TopoDS.Vertex_1(current); p = oc.BRep_Tool.Pnt(vertex);
+            [p.X(),p.Y(),p.Z()].forEach((v,k)=>{min[k]=Math.min(min[k],v);max[k]=Math.max(max[k],v);});
+          } finally { dispose(current,vertex,p); }
+          explorer.Next();
+        }
+      } finally { explorer.delete(); }
+      return {min,max};
+    }
+    const sewing = keep(new oc.BRepBuilderAPI_Sewing(tol,true,true,true,false));
+    const progress = keep(new oc.Handle_Message_ProgressIndicator_1());
+    const triangles = parsed.triangles;
+    say('Đang dựng ' + triangles.length.toLocaleString('vi-VN') + ' mặt tam giác…');
+    for (let i = 0; i < triangles.length; i++) {
+      const items = [];
+      const local = v => {items.push(v);return v;};
+      try {
+        const p = triangles[i].map(v=>local(new oc.gp_Pnt_3(...v)));
+        const polygon = local(new oc.BRepBuilderAPI_MakePolygon_3(p[0],p[1],p[2],true));
+        if (!polygon.IsDone()) throw new Error('Không dựng được cạnh tại tam giác ' + (i+1) + '.');
+        const wire = local(polygon.Wire());
+        const faceMaker = local(new oc.BRepBuilderAPI_MakeFace_15(wire,true));
+        if (!faceMaker.IsDone()) throw new Error('Không dựng được mặt tại tam giác ' + (i+1) + '. Hãy sửa STL hoặc giảm dung sai.');
+        const face = local(faceMaker.Face());
+        sewing.Add(face);
+      } finally { dispose(...items); }
+      if (i > 0 && i % 500 === 0) say('Đang dựng mặt: ' + i.toLocaleString('vi-VN') + '/' + triangles.length.toLocaleString('vi-VN') + '…');
+    }
+    triangles.length = 0;
+    say('Đang khâu các cạnh theo dung sai ' + tol + ' mm…');
+    sewing.Perform(progress);
+    if (sewing.NbDeletedFaces() > 0) throw new Error('Dung sai làm mất mặt nhỏ khi khâu. Hãy giảm dung sai và thử lại.');
+    let shape = keep(sewing.SewedShape());
+    if (shape.IsNull() || !count(shape,types.TopAbs_FACE)) throw new Error('Không tạo được hình học từ lưới STL.');
+    const multipleEdges = sewing.NbMultipleEdges();
+    if (multipleEdges) warnings.push('Lưới có cạnh dùng chung bất thường (non-manifold); kết quả được giữ dạng mặt/vỏ.');
+    if (job.refine) {
+      say('Đang gộp các mặt đồng phẳng…');
+      const unify = keep(new oc.ShapeUpgrade_UnifySameDomain_2(shape,true,true,false));
+      unify.SetLinearTolerance(tol);
+      unify.SetAngularTolerance(1e-10);
+      unify.Build();
+      const refined = keep(unify.Shape());
+      if (!refined.IsNull() && count(refined,types.TopAbs_FACE) && valid(refined)) shape = refined;
+      else warnings.push('Không gộp được mặt an toàn; giữ nguyên các mặt đã khâu.');
+    }
+    say('Đang kiểm tra vỏ kín và tạo khối…');
+    const builder = keep(new oc.BRep_Builder());
+    const result = keep(new oc.TopoDS_Compound());
+    builder.MakeCompound(result);
+    const shells = parts(shape,types.TopAbs_SHELL);
+    const looseFaces = parts(shape,types.TopAbs_FACE,types.TopAbs_SHELL);
+    for (const face of looseFaces) builder.Add(result,face);
+    let solids = 0, openShells = 0;
+    const boxes = shells.length <= 256 ? shells.map(bounds) : [];
+    const ambiguous = new Set();
+    for (let i=0;i<boxes.length;i++) for (let j=i+1;j<boxes.length;j++) {
+      if (boxes[i].min.every((v,k)=>v <= boxes[j].max[k]+tol && boxes[j].min[k] <= boxes[i].max[k]+tol)) { ambiguous.add(i);ambiguous.add(j); }
+    }
+    if (ambiguous.size || shells.length > 256) warnings.push('Có các vỏ với vùng bao chồng lấn hoặc quá nhiều vỏ: giữ dạng vỏ vì chưa xác định chắc quan hệ giữa chúng và các lỗ rỗng.');
+    for (let i=0;i<shells.length;i++) {
+      let shell = keep(oc.TopoDS.Shell_1(shells[i]));
+      const fix = keep(new oc.ShapeFix_Shell_1());
+      fix.FixFaceOrientation(shell,true,false);
+      const fixed = keep(fix.Shell());
+      const orientationSafe = !fixed.IsNull() && fix.NbShells() <= 1 && count(fixed,types.TopAbs_FACE) === count(shell,types.TopAbs_FACE);
+      if (orientationSafe) shell = fixed;
+      else warnings.push('Không thể sửa hướng mặt an toàn cho một vỏ; giữ nguyên vỏ đó.');
+      let madeSolid = false;
+      if (orientationSafe && !multipleEdges && shells.length <= 256 && !ambiguous.has(i) && oc.BRep_Tool.IsClosed_1(shell) && valid(shell)) {
+        const maker = keep(new oc.BRepBuilderAPI_MakeSolid_3(shell));
+        if (maker.IsDone()) {
+          const solid = keep(maker.Solid());
+          if (oc.BRepLib.OrientClosedSolid(solid) && valid(solid)) {
+            const props = keep(new oc.GProp_GProps_1());
+            oc.BRepGProp.VolumeProperties_1(solid,props,true,false,false);
+            const volume = props.Mass();
+            if (Number.isFinite(volume) && volume > 1e-18) { builder.Add(result,solid); solids++; madeSolid=true; }
+          }
+        }
+      }
+      if (!madeSolid) { builder.Add(result,shell); openShells++; }
+    }
+    if (result.NbChildren() === 0) throw new Error('Kết quả không có mặt hoặc vỏ hợp lệ.');
+    if (!valid(result)) throw new Error('Hình học sau khi khâu chưa hợp lệ. Hãy sửa lưới STL hoặc thử dung sai nhỏ hơn.');
+    const faces = count(result,types.TopAbs_FACE);
+    if (!faces) throw new Error('Kết quả không chứa mặt nào.');
+    const allSolid = solids > 0 && openShells === 0 && looseFaces.length === 0;
+    if (!allSolid) warnings.push('Kết quả có mặt/vỏ chưa tạo thành khối. Hãy kiểm tra độ kín trong phần mềm CAD.');
+    say('Đang xuất file STEP…');
+    const writer = keep(new oc.STEPControl_Writer_1());
+    const success = oc.IFSelect_ReturnStatus.IFSelect_RetDone.value;
+    const status = writer.Transfer(result,oc.STEPControl_StepModelType.STEPControl_AsIs,true);
+    if (status.value !== success) throw new Error('OpenCASCADE không chuyển được hình học sang STEP.');
+    if (writer.Write(outputPath).value !== success) throw new Error('Không ghi được file STEP.');
+    const bytes = oc.FS.readFile(outputPath);
+    if (bytes.length < 100 || !new TextDecoder().decode(bytes.subarray(0,40)).includes('ISO-10303-21')) throw new Error('File STEP xuất ra rỗng hoặc không hợp lệ.');
+    const output = bytes.slice().buffer;
+    postMessage({type:'done',id,data:output,info:{triangles:parsed.total,faces,solid:allSolid,solids,shells:openShells,skipped:parsed.skipped,warnings}},[output]);
+  } catch (err) {
+    const msg = err && err.message ? err.message : 'Bộ chuyển đổi gặp lỗi hình học hoặc thiếu bộ nhớ. Hãy giảm số tam giác/sửa STL rồi thử lại.';
+    postMessage({type:'error',id,msg});
+  } finally {
+    if (oc) { try { oc.FS.unlink(outputPath); } catch {} }
+    dispose(...owned);
+    close();
+  }
 };
+
+
+
+
+
+
