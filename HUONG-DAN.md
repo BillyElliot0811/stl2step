@@ -30,10 +30,21 @@ Máy chủ chỉ lắng nghe trên `127.0.0.1`. Nội dung STL không được g
 ## Hiểu đúng file STEP
 
 - STL **không lưu đơn vị**. Công cụ hiểu **1 đơn vị STL = 1 mm**, giữ nguyên các giá trị tọa độ. Kiểm tra lại kích thước trong CAD nếu STL gốc dùng inch hoặc đơn vị khác.
-- STEP gồm các mặt phẳng từ lưới; các mặt đồng phẳng được gộp khi bật tùy chọn. Mặt cong vẫn là nhiều mặt phẳng, không tự phục hồi mặt trụ, lỗ tròn hay lịch sử thiết kế tham số.
+- Khi bật nhận dạng và mô hình thuộc nhóm hỗ trợ, công cụ dựng lại mặt trụ/cung tròn và các mặt bo giải tích. Nếu không đủ tin cậy, công cụ giữ các mặt phẳng từ lưới và ghi cảnh báo. Không khôi phục lịch sử thiết kế hay cây feature của Inventor.
 - Công cụ khâu cạnh, sửa hướng mặt, kiểm tra hình học và chỉ đánh dấu solid khi vỏ kín tạo được khối hợp lệ với thể tích dương.
 - Lưới hở được giữ dạng mặt/vỏ nếu hình học hợp lệ. Các vỏ có vùng bao chồng lấn, vỏ lồng nhau hoặc quá nhiều vỏ được giữ thận trọng ở dạng vỏ để tránh tạo sai lỗ rỗng/thể tích. Thông báo sẽ nói rõ kết quả chưa phải toàn bộ khối kín.
 - Không có bảo đảm sửa được mọi STL tự giao, non-manifold hoặc lỗi số học. Nếu có cảnh báo hoặc bạn dùng cho sản xuất, kiểm tra lại hình học trong phần mềm CAD đích.
+
+## Nhận dạng lỗ tròn và bo cơ bản (thử nghiệm)
+
+Tùy chọn được bật mặc định. Bước đầu hỗ trợ một nhóm chi tiết cụ thể: **đế chữ nhật bo đều ở góc và cạnh đáy (cùng bán kính), một gờ chữ nhật ở trên, một hốc trụ kín đáy**. Có thể đổi kích thước, lệch tâm hốc/gờ, xoay và tịnh tiến; thông số được đo từ lưới, không dựa vào tên file.
+
+- Sai lệch nhận dạng mặc định **0.01 mm**, cho phép 0.0001–0.1 mm. Đây là dung sai dựng lại mặt cong, khác với dung sai khâu.
+- Lưới cần kín, liên thông và có hướng mặt nhất quán. Công cụ kiểm tra vòng tròn, các mặt phẳng, đỉnh lưới, điểm trong/cạnh tam giác, hướng mặt, thể tích và lấy mẫu mặt dựng lại so với lưới.
+- Chỉ dùng mặt cong khi mọi kiểm tra đều đạt và B-rep tạo được một solid hợp lệ. Nếu không, tự dùng luồng chuyển đổi mặt lưới cũ và nêu lý do.
+- **Sai lệch lấy mẫu là số đo trên tập điểm kiểm tra, không phải giới hạn Hausdorff được chứng minh cho mọi điểm của mô hình.** Cần xác nhận lại trong CAD trước khi dùng cho gia công.
+- Chưa nhận dạng chung mọi loại fillet, bo biến thiên, nhiều hốc, mặt tự do, chi tiết quét hoặc lưới scan nhiễu. Tắt tùy chọn để luôn giữ hình học dạng mặt lưới.
+- STEP có mặt trụ và mặt cong thật để CAD đo/chọn; vẫn là solid nhập khẩu, không tự tạo feature Hole/Fillet hay lịch sử thiết kế của Inventor.
 
 ## Nếu gặp lỗi
 
@@ -48,11 +59,13 @@ Máy chủ chỉ lắng nghe trên `127.0.0.1`. Nội dung STL không được g
 - `index.html`: giao diện tiếng Việt, có bố cục cho điện thoại và chế độ tối.
 - `app.js`: quản lý file, trạng thái tác vụ, hủy, thời gian chờ và tải xuống.
 - `stl.js`: đọc/kiểm tra STL ASCII và nhị phân, giới hạn tài nguyên.
-- `worker.js`: khâu mặt, gộp mặt, kiểm tra solid và xuất STEP trong Worker.
+- `worker.js`: điều phối nhận dạng/khâu mặt, kiểm tra solid và xuất STEP trong Worker.
+- `recognize.js`, `mesh-qa.js`: nhận dạng nhóm chi tiết và kiểm tra sai lệch hai chiều bằng lấy mẫu.
+- `analytic-builder.js`: dựng lại solid bằng mặt phẳng, mặt trụ và fillet OpenCASCADE.
 - `oc.js`, `oc.wasm`: cặp thư viện OpenCASCADE.js đi kèm; giữ nguyên hai file này, không trộn phiên bản.
 - `serve.py`, `CHAY-WEB.cmd`: mở web cục bộ, không cần cài gói Python bên ngoài.
 
-Có thể đưa các file ứng dụng lên máy chủ tĩnh HTTP(S). Đường dẫn tương đối hỗ trợ đặt trong thư mục con. Máy chủ cần phục vụ đúng nội dung `oc.wasm` (MIME khuyến nghị `application/wasm`), không thay bằng trang HTML fallback. Khi cập nhật mã JavaScript, cập nhật chuỗi phiên bản trong URL `app.js`, `worker.js`, `stl.js` để tránh cache cũ. Không đưa thư mục sao lưu `_backup-*` lên bản công khai.
+Có thể đưa các file ứng dụng lên máy chủ tĩnh HTTP(S). Đường dẫn tương đối hỗ trợ đặt trong thư mục con. Máy chủ cần phục vụ đúng nội dung `oc.wasm` (MIME khuyến nghị `application/wasm`), không thay bằng trang HTML fallback. Khi cập nhật mã JavaScript, cập nhật chuỗi phiên bản trong URL JavaScript trong HTML/Worker, bao gồm các mô-đun nhận dạng để tránh cache cũ. Không đưa thư mục sao lưu `_backup-*` lên bản công khai.
 
 ## Kiểm tra bản sửa ngày 27/10/2026
 

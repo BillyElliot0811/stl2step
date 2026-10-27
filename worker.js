@@ -15,7 +15,7 @@ onmessage = async ({data:job}) => {
   const outputPath = '/out.step';
   try {
     say('Đang kiểm tra file STL…');
-    importScripts('stl.js?v=20261027');
+    importScripts('stl.js?v=20261027-curves1');
     const tol = job.tol;
     if (typeof tol !== 'number' || !Number.isFinite(tol) || tol < 1e-7 || tol > 1) throw new Error('Dung sai phải từ 0,0000001 đến 1 mm.');
     const parsed = STL.parse(job.buffer, Boolean(job.repairMesh));
@@ -23,6 +23,14 @@ onmessage = async ({data:job}) => {
     job.buffer = null;
     const warnings = [];
     if (parsed.skipped) warnings.push('Đã loại ' + parsed.skipped.toLocaleString('vi-VN') + ' tam giác suy biến hoặc trùng lặp.');
+    let recovered = null;
+    if (job.recoverCurves) {
+      if (job.curveTolerance !== undefined && (typeof job.curveTolerance !== 'number' || !Number.isFinite(job.curveTolerance) || job.curveTolerance < 0.0001 || job.curveTolerance > 0.1)) throw new Error('Sai lệch nhận dạng phải từ 0,0001 đến 0,1 mm.');
+      say('Đang nhận dạng lỗ tròn và bo cơ bản…');
+      importScripts('mesh-qa.js?v=20261027-curves1','recognize.js?v=20261027-curves1');
+      recovered = CurveRecognition.recognize(parsed.triangles,{tolerance:job.curveTolerance});
+      if (!recovered.ok) warnings.push('Giữ mặt lưới vì chưa nhận dạng được mặt cong an toàn: ' + recovered.reason);
+    }
     say('Đang nạp bộ chuyển đổi (oc.wasm khoảng 63 MiB ở lần đầu)…');
     importScripts('oc.js');
     // Fetch explicitly: this older Emscripten loader can leave its ready
@@ -86,6 +94,22 @@ onmessage = async ({data:job}) => {
       } finally { explorer.delete(); }
       return {min,max};
     }
+    let result, faces, allSolid, solids = 0, openShells = 0, reconstruction = null;
+    if (recovered && recovered.ok) {
+      say('Đang dựng mặt trụ, cung tròn và fillet giải tích…');
+      importScripts('analytic-builder.js?v=20261027-curves1');
+      try {
+        const analytic = AnalyticBuilder.build(oc,recovered.model,keep);
+        if (Math.abs(analytic.stats.volume-recovered.diagnostics.analyticVolume) > Math.max(1e-6,recovered.diagnostics.analyticVolume*1e-6)) throw new Error('Thể tích B-rep không khớp mô hình nhận dạng.');
+        result = analytic.shape; faces = analytic.stats.faces; solids = 1; allSolid = true;
+        reconstruction = {...recovered.diagnostics,surfaces:analytic.stats.surfaces,radii:analytic.stats.radii};
+        parsed.triangles.length = 0;
+      } catch (error) {
+        if (typeof error === 'number' || error instanceof WebAssembly.RuntimeError) throw error;
+        warnings.push('Không dựng được mặt cong hợp lệ; giữ mặt lưới. ' + (error.message || ''));
+      }
+    }
+    if (!result) {
     const sewing = keep(new oc.BRepBuilderAPI_Sewing(tol,true,true,true,false));
     const progress = keep(new oc.Handle_Message_ProgressIndicator_1());
     const triangles = parsed.triangles;
@@ -125,12 +149,12 @@ onmessage = async ({data:job}) => {
     }
     say('Đang kiểm tra vỏ kín và tạo khối…');
     const builder = keep(new oc.BRep_Builder());
-    const result = keep(new oc.TopoDS_Compound());
+    result = keep(new oc.TopoDS_Compound());
     builder.MakeCompound(result);
     const shells = parts(shape,types.TopAbs_SHELL);
     const looseFaces = parts(shape,types.TopAbs_FACE,types.TopAbs_SHELL);
     for (const face of looseFaces) builder.Add(result,face);
-    let solids = 0, openShells = 0;
+    solids = 0; openShells = 0;
     const boxes = shells.length <= 256 ? shells.map(bounds) : [];
     const ambiguous = new Set();
     for (let i=0;i<boxes.length;i++) for (let j=i+1;j<boxes.length;j++) {
@@ -162,10 +186,11 @@ onmessage = async ({data:job}) => {
     }
     if (result.NbChildren() === 0) throw new Error('Kết quả không có mặt hoặc vỏ hợp lệ.');
     if (!valid(result)) throw new Error('Hình học sau khi khâu chưa hợp lệ. Hãy sửa lưới STL hoặc thử dung sai nhỏ hơn.');
-    const faces = count(result,types.TopAbs_FACE);
+    faces = count(result,types.TopAbs_FACE);
     if (!faces) throw new Error('Kết quả không chứa mặt nào.');
-    const allSolid = solids > 0 && openShells === 0 && looseFaces.length === 0;
+    allSolid = solids > 0 && openShells === 0 && looseFaces.length === 0;
     if (!allSolid) warnings.push('Kết quả có mặt/vỏ chưa tạo thành khối. Hãy kiểm tra độ kín trong phần mềm CAD.');
+    }
     say('Đang xuất file STEP…');
     const writer = keep(new oc.STEPControl_Writer_1());
     const success = oc.IFSelect_ReturnStatus.IFSelect_RetDone.value;
@@ -175,7 +200,7 @@ onmessage = async ({data:job}) => {
     const bytes = oc.FS.readFile(outputPath);
     if (bytes.length < 100 || !new TextDecoder().decode(bytes.subarray(0,40)).includes('ISO-10303-21')) throw new Error('File STEP xuất ra rỗng hoặc không hợp lệ.');
     const output = bytes.slice().buffer;
-    postMessage({type:'done',id,data:output,info:{triangles:parsed.total,faces,solid:allSolid,solids,shells:openShells,skipped:parsed.skipped,warnings}},[output]);
+    postMessage({type:'done',id,data:output,info:{triangles:parsed.total,faces,solid:allSolid,solids,shells:openShells,skipped:parsed.skipped,warnings,reconstruction}},[output]);
   } catch (err) {
     const msg = err && err.message ? err.message : 'Bộ chuyển đổi gặp lỗi hình học hoặc thiếu bộ nhớ. Hãy giảm số tam giác/sửa STL rồi thử lại.';
     postMessage({type:'error',id,msg});

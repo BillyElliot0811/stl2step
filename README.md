@@ -12,7 +12,15 @@ Chuyển STL ASCII/nhị phân sang STEP ngay trong trình duyệt bằng OpenCA
 
 Giới hạn: **32 MiB**, **20.000 tam giác/file**, **3 phút/tác vụ**. Có nút hủy để dừng và thử lại.
 
-STL không chứa đơn vị; công cụ hiểu 1 đơn vị = 1 mm. STEP giữ bề mặt dạng các mặt phẳng từ lưới, không khôi phục lịch sử thiết kế hoặc mặt cong tham số. Lưới kín và hợp lệ có thể tạo solid; lưới hở hoặc các vỏ chưa xác định quan hệ được báo rõ là mặt/vỏ.
+STL không chứa đơn vị; công cụ hiểu 1 đơn vị = 1 mm. Có tùy chọn nhận dạng mặt trụ/cung tròn và bo cơ bản; nếu không đủ tin cậy, công cụ giữ các mặt phẳng từ lưới. Không khôi phục cây feature/lịch sử thiết kế của Inventor. Lưới kín và hợp lệ có thể tạo solid; lưới hở hoặc các vỏ chưa xác định quan hệ được báo rõ là mặt/vỏ.
+
+## Nhận dạng mặt cong (thử nghiệm)
+
+Hỗ trợ bước đầu nhóm nắp/tấm có **đế chữ nhật bo đều góc và cạnh đáy với cùng bán kính, một gờ chữ nhật và một hốc trụ kín đáy**. Thông số được đo từ lưới; hỗ trợ đổi kích thước, xoay và tịnh tiến, không phụ thuộc tên file.
+
+Sai lệch nhận dạng mặc định **0.01 mm**, tách biệt với dung sai khâu. Kiểm tra vòng tròn, các mặt phẳng, toàn bộ đỉnh, điểm trong tam giác, hướng mặt, thể tích, và lấy mẫu mặt dựng lại so với STL. Chỉ xuất mặt cong khi tạo được một solid hợp lệ; nếu không thì quay về chế độ mặt lưới, kèm lý do. Sai lệch hiển thị là **sai lệch lấy mẫu**, chưa phải giới hạn được chứng minh cho mọi điểm.
+
+Chưa hỗ trợ chung mọi loại fillet, bo biến thiên, mặt tự do, nhiều hốc hay dữ liệu scan nhiễu. Hãy kiểm tra STEP trong CAD trước khi dùng cho sản xuất.
 
 ## GitHub Pages
 
@@ -22,9 +30,9 @@ Các file ứng dụng nằm ở gốc repo; `.nojekyll` cho phép phục vụ t
 - **Branch:** `main`
 - **Folder:** `/ (root)`
 
-Sau khi commit thay đổi vào `main`, chờ lần triển khai trong tab **Actions** thành công rồi tải lại trang. Nếu trình duyệt còn cache bản cũ, dùng Ctrl+F5. Khi sửa JavaScript lần tiếp theo, tăng chuỗi phiên bản trong URL `app.js`, `worker.js`, `stl.js`.
+Sau khi commit thay đổi vào `main`, chờ lần triển khai trong tab **Actions** thành công rồi tải lại trang. Nếu trình duyệt còn cache bản cũ, dùng Ctrl+F5. Khi sửa JavaScript lần tiếp theo, tăng chuỗi phiên bản trong các URL JavaScript được thay đổi trong HTML và Worker.
 
-Cần giữ đủ `index.html`, `app.js`, `stl.js`, `worker.js`, `oc.js`, `oc.wasm` cùng thư mục. Không đưa `oc.wasm` vào Git LFS vì trang cần tải trực tiếp nội dung WASM.
+Cần giữ đủ `index.html`, `app.js`, `stl.js`, `worker.js`, `oc.js`, `oc.wasm`, `mesh-qa.js`, `recognize.js`, `analytic-builder.js` cùng thư mục. Không đưa `oc.wasm` vào Git LFS vì trang cần tải trực tiếp nội dung WASM.
 
 ## Chạy trên máy
 
@@ -38,4 +46,4 @@ Xem [HUONG-DAN.md](HUONG-DAN.md) để biết tùy chọn, giới hạn và các
 - 17 kết quả STEP được đọc lại để so số mặt/số khối và thể tích mẫu solid.
 - 21 kiểm tra giao diện trên Chrome, gồm hủy/thử lại, timeout và thiếu/hỏng thư viện.
 
-Các kiểm tra dùng mẫu tổng hợp; vẫn cần xác nhận STL thực tế trong phần mềm CAD đích.
+Bản nhận dạng có thêm 18 ca hình học (mẫu thực, xoay/tịnh tiến/đổi tỉ lệ, hai mô hình tổng hợp khác kích thước, lưới thô và các trường hợp từ chối) và 4 kiểm tra Worker cho lựa chọn/tự quay về mặt lưới. STEP mẫu thực được đọc lại để kiểm tra một solid hợp lệ với các mặt trụ, mặt cầu và cạnh tròn thật. Vẫn cần xác nhận từng STL thực tế trong phần mềm CAD đích.
