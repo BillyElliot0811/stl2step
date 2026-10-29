@@ -14,6 +14,14 @@ Giới hạn: **32 MiB**, **20.000 tam giác/file**, **3 phút/tác vụ**. Có 
 
 STL không chứa đơn vị; công cụ hiểu 1 đơn vị = 1 mm. Có tùy chọn nhận dạng mặt trụ/cung tròn và bo cơ bản; nếu không đủ tin cậy, công cụ giữ các mặt phẳng từ lưới. Không khôi phục cây feature/lịch sử thiết kế của Inventor. Lưới kín và hợp lệ có thể tạo solid; lưới hở hoặc các vỏ chưa xác định quan hệ được báo rõ là mặt/vỏ.
 
+## Tiền xử lý lưới
+
+Bật mặc định trước bước nhận dạng và xuất STEP: loại tam giác trùng/suy biến, ghép các đỉnh biên trong dung sai khâu nhưng tối đa **0.0001 mm**, sửa hướng tam giác khi xác định được, rồi kiểm tra lại cạnh biên, cạnh non-manifold và đỉnh nối bất thường. Lưới kín tốt giữ nguyên tọa độ. Không tự xóa các mặt giao nhau, không đổi hướng riêng vỏ lồng nhau để đoán lỗ rỗng.
+
+**Vá lỗ nhỏ có biên phẳng** là tùy chọn riêng, mặc định tắt: bật khi biết STL bị thiếu mặt; kích thước mặc định **1 mm**, cho phép 0.001–10 mm, đo bằng khoảng cách xa nhất giữa hai đỉnh biên. Chỉ vá vòng biên đơn phẳng không lồng nhau, không chồng/cắt hình học hiện có; có giới hạn số đỉnh, số vòng, ngân sách kiểm tra và tổng số tam giác. Miệng hốc thiết kế cũng có thể có biên như vậy, nên người dùng cần xác nhận mục đích và xem vùng vá trong CAD. Không tái tạo phần cong bị mất bằng nắp phẳng.
+
+Kết quả báo số đỉnh ghép, tam giác sửa hướng/loại bỏ, số lỗ và tam giác thêm, cùng các cạnh lỗi còn lại. Topology kín chưa chứng minh lưới không tự giao. Cạnh/đỉnh non-manifold còn lại sẽ chặn nhận dạng và tạo solid. File Chesam.stl không có cạnh biên hở, nhưng có 4 cạnh non-manifold; vá lỗ không giải quyết lỗi đó.
+
 ## Nhận dạng mặt cong (thử nghiệm)
 
 Hỗ trợ bước đầu nhóm nắp/tấm có **đế chữ nhật bo đều góc và cạnh đáy với cùng bán kính, một gờ chữ nhật và một hốc trụ kín đáy**. Thông số được đo từ lưới; hỗ trợ đổi kích thước, xoay và tịnh tiến, không phụ thuộc tên file.
@@ -32,7 +40,7 @@ Các file ứng dụng nằm ở gốc repo; `.nojekyll` cho phép phục vụ t
 
 Sau khi commit thay đổi vào `main`, chờ lần triển khai trong tab **Actions** thành công rồi tải lại trang. Nếu trình duyệt còn cache bản cũ, dùng Ctrl+F5. Khi sửa JavaScript lần tiếp theo, tăng chuỗi phiên bản trong các URL JavaScript được thay đổi trong HTML và Worker.
 
-Cần giữ đủ `index.html`, `app.js`, `stl.js`, `worker.js`, `oc.js`, `oc.wasm`, `mesh-qa.js`, `recognize.js`, `analytic-builder.js` cùng thư mục. Không đưa `oc.wasm` vào Git LFS vì trang cần tải trực tiếp nội dung WASM.
+Cần giữ đủ `index.html`, `app.js`, `stl.js`, `worker.js`, `oc.js`, `oc.wasm`, `mesh-qa.js`, `recognize.js`, `analytic-builder.js`, `preprocess.js` cùng thư mục. Không đưa `oc.wasm` vào Git LFS vì trang cần tải trực tiếp nội dung WASM.
 
 ## Chạy trên máy
 
@@ -47,3 +55,5 @@ Xem [HUONG-DAN.md](HUONG-DAN.md) để biết tùy chọn, giới hạn và các
 - 21 kiểm tra giao diện trên Chrome, gồm hủy/thử lại, timeout và thiếu/hỏng thư viện.
 
 Bản nhận dạng có thêm 18 ca hình học (mẫu thực, xoay/tịnh tiến/đổi tỉ lệ, hai mô hình tổng hợp khác kích thước, lưới thô và các trường hợp từ chối) và 4 kiểm tra Worker cho lựa chọn/tự quay về mặt lưới. STEP mẫu thực được đọc lại để kiểm tra một solid hợp lệ với các mặt trụ, mặt cầu và cạnh tròn thật. Vẫn cần xác nhận từng STL thực tế trong phần mềm CAD đích.
+
+Bước tiền xử lý được kiểm tra bằng 23 ca hình học và 8 ca Worker/WASM, cùng 34 ca Worker cũ. Mẫu thiếu một tam giác được vá thành solid, mẫu tốt giữ nguyên, mẫu Chesam giữ cảnh báo non-manifold.

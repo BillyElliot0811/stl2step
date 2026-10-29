@@ -25,7 +25,10 @@ Máy chủ chỉ lắng nghe trên `127.0.0.1`. Nội dung STL không được g
 - Nạp `oc.wasm` tối đa 90 giây, khởi tạo WASM tối đa 45 giây; lỗi tải thư viện có thông báo riêng.
 - Dung sai khâu hợp lệ từ **0.0000001 đến 1 mm**; mặc định **0.0001 mm**. Dung sai quá lớn có thể làm mất mặt nhỏ; khi phát hiện, công cụ dừng và yêu cầu giảm dung sai.
 - File nhị phân phải có kích thước khớp số tam giác trong header. File ASCII phải có đủ cấu trúc facet/loop/vertex. File bị cắt, số vô hạn/NaN, facet không đủ đỉnh và dữ liệu rác bị từ chối.
-- Tùy chọn làm sạch chỉ loại tam giác suy biến hoặc trùng lặp, kèm số lượng đã loại. Không vá lỗ hay tái tạo hình học thiếu. Tắt tùy chọn này thì lưới có các lỗi đó sẽ bị từ chối.
+- Tiền xử lý bật mặc định: loại tam giác suy biến/trùng, ghép đỉnh biên gần nhau trong dung sai khâu nhưng tối đa 0.0001 mm, sửa hướng mặt, kiểm tra cạnh/đỉnh non-manifold. Lưới tốt giữ nguyên tọa độ. Tắt tùy chọn thì STL có mặt suy biến/trùng bị từ chối.
+- Vá lỗ nhỏ có biên phẳng là tùy chọn riêng, mặc định tắt. Chỉ bật nếu biết STL thiếu mặt; kích thước lỗ mặc định 1 mm, cho phép 0.001–10 mm, đo bằng khoảng cách xa nhất giữa hai đỉnh biên. Có thể bít nhầm miệng hốc thiết kế, nên kiểm tra vùng vá trong CAD.
+- Không vá biên lớn, tự cắt, lồng nhau, không phẳng, phân nhánh, hoặc mặt vá chạm/cắt hình học khác. Giới hạn tối đa 256 đỉnh/vòng, 128 vòng và ngân sách kiểm tra; không vượt 20.000 tam giác sau vá. Không tự xóa mặt non-manifold hoặc tái tạo fillet bị mất.
+- Kết quả báo số đỉnh ghép, mặt loại/sửa hướng, số lỗ và tam giác thêm, cạnh biên/cạnh bất thường còn lại. Topology kín không bảo đảm không tự giao; vẫn kiểm tra B-rep trước khi báo solid. Chesam.stl không có biên hở để vá, còn 4 cạnh non-manifold nên giữ dạng vỏ.
 
 ## Hiểu đúng file STEP
 
@@ -59,6 +62,7 @@ Tùy chọn được bật mặc định. Bước đầu hỗ trợ một nhóm 
 - `index.html`: giao diện tiếng Việt, có bố cục cho điện thoại và chế độ tối.
 - `app.js`: quản lý file, trạng thái tác vụ, hủy, thời gian chờ và tải xuống.
 - `stl.js`: đọc/kiểm tra STL ASCII và nhị phân, giới hạn tài nguyên.
+- `preprocess.js`: ghép đỉnh biên, làm sạch, sửa hướng, chẩn đoán topology và vá lỗ phẳng theo lựa chọn.
 - `worker.js`: điều phối nhận dạng/khâu mặt, kiểm tra solid và xuất STEP trong Worker.
 - `recognize.js`, `mesh-qa.js`: nhận dạng nhóm chi tiết và kiểm tra sai lệch hai chiều bằng lấy mẫu.
 - `analytic-builder.js`: dựng lại solid bằng mặt phẳng, mặt trụ và fillet OpenCASCADE.

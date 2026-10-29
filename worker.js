@@ -15,7 +15,7 @@ onmessage = async ({data:job}) => {
   const outputPath = '/out.step';
   try {
     say('Đang kiểm tra file STL…');
-    importScripts('stl.js?v=20261027-curves1');
+    importScripts('stl.js?v=20261029-pre1');
     const tol = job.tol;
     if (typeof tol !== 'number' || !Number.isFinite(tol) || tol < 1e-7 || tol > 1) throw new Error('Dung sai phải từ 0,0000001 đến 1 mm.');
     const parsed = STL.parse(job.buffer, Boolean(job.repairMesh));
@@ -23,12 +23,23 @@ onmessage = async ({data:job}) => {
     job.buffer = null;
     const warnings = [];
     if (parsed.skipped) warnings.push('Đã loại ' + parsed.skipped.toLocaleString('vi-VN') + ' tam giác suy biến hoặc trùng lặp.');
+    importScripts('mesh-qa.js?v=20261029-pre1','preprocess.js?v=20261029-pre1');
+    if (job.fillHoles && !job.repairMesh) throw new Error('Cần bật tiền xử lý trước khi vá lỗ.');
+    let preprocessing = null, inputTopology;
+    if (job.repairMesh) {
+      say('Đang tiền xử lý: ghép đỉnh, sửa hướng mặt và kiểm tra biên hở…');
+      const pre = MeshPreprocess.process(parsed.triangles,{weldTolerance:Math.min(tol,1e-4),fillHoles:Boolean(job.fillHoles),maxHoleDiameter:job.maxHoleDiameter === undefined ? 1 : job.maxHoleDiameter,maxTriangles:STL.MAX_TRIANGLES});
+      parsed.triangles = pre.triangles; preprocessing = pre.report; inputTopology = pre.report.after;
+      warnings.push(...pre.warnings);
+    } else inputTopology = MeshPreprocess.analyze(parsed.triangles);
+    const topologySafe = inputTopology.nonmanifoldEdges === 0 && inputTopology.pinchedVertices === 0;
+    if (!topologySafe && !preprocessing) warnings.push('Lưới còn cạnh/đỉnh bất thường; giữ dạng mặt/vỏ để tránh tạo khối sai.');
     let recovered = null;
     if (job.recoverCurves) {
       if (job.curveTolerance !== undefined && (typeof job.curveTolerance !== 'number' || !Number.isFinite(job.curveTolerance) || job.curveTolerance < 0.0001 || job.curveTolerance > 0.1)) throw new Error('Sai lệch nhận dạng phải từ 0,0001 đến 0,1 mm.');
       say('Đang nhận dạng lỗ tròn và bo cơ bản…');
-      importScripts('mesh-qa.js?v=20261027-curves1','recognize.js?v=20261027-curves1');
-      recovered = CurveRecognition.recognize(parsed.triangles,{tolerance:job.curveTolerance});
+      importScripts('recognize.js?v=20261029-pre1');
+      recovered = topologySafe ? CurveRecognition.recognize(parsed.triangles,{tolerance:job.curveTolerance}) : {ok:false,reason:'Lưới còn cạnh hoặc đỉnh non-manifold sau tiền xử lý.'};
       if (!recovered.ok) warnings.push('Giữ mặt lưới vì chưa nhận dạng được mặt cong an toàn: ' + recovered.reason);
     }
     say('Đang nạp bộ chuyển đổi (oc.wasm khoảng 63 MiB ở lần đầu)…');
@@ -97,7 +108,7 @@ onmessage = async ({data:job}) => {
     let result, faces, allSolid, solids = 0, openShells = 0, reconstruction = null;
     if (recovered && recovered.ok) {
       say('Đang dựng mặt trụ, cung tròn và fillet giải tích…');
-      importScripts('analytic-builder.js?v=20261027-curves1');
+      importScripts('analytic-builder.js?v=20261029-pre1');
       try {
         const analytic = AnalyticBuilder.build(oc,recovered.model,keep);
         if (Math.abs(analytic.stats.volume-recovered.diagnostics.analyticVolume) > Math.max(1e-6,recovered.diagnostics.analyticVolume*1e-6)) throw new Error('Thể tích B-rep không khớp mô hình nhận dạng.');
@@ -170,7 +181,7 @@ onmessage = async ({data:job}) => {
       if (orientationSafe) shell = fixed;
       else warnings.push('Không thể sửa hướng mặt an toàn cho một vỏ; giữ nguyên vỏ đó.');
       let madeSolid = false;
-      if (orientationSafe && !multipleEdges && shells.length <= 256 && !ambiguous.has(i) && oc.BRep_Tool.IsClosed_1(shell) && valid(shell)) {
+      if (topologySafe && orientationSafe && !multipleEdges && shells.length <= 256 && !ambiguous.has(i) && oc.BRep_Tool.IsClosed_1(shell) && valid(shell)) {
         const maker = keep(new oc.BRepBuilderAPI_MakeSolid_3(shell));
         if (maker.IsDone()) {
           const solid = keep(maker.Solid());
@@ -200,7 +211,7 @@ onmessage = async ({data:job}) => {
     const bytes = oc.FS.readFile(outputPath);
     if (bytes.length < 100 || !new TextDecoder().decode(bytes.subarray(0,40)).includes('ISO-10303-21')) throw new Error('File STEP xuất ra rỗng hoặc không hợp lệ.');
     const output = bytes.slice().buffer;
-    postMessage({type:'done',id,data:output,info:{triangles:parsed.total,faces,solid:allSolid,solids,shells:openShells,skipped:parsed.skipped,warnings,reconstruction}},[output]);
+    postMessage({type:'done',id,data:output,info:{triangles:parsed.total,faces,solid:allSolid,solids,shells:openShells,skipped:parsed.skipped,warnings,reconstruction,preprocessing,inputTopology}},[output]);
   } catch (err) {
     const msg = err && err.message ? err.message : 'Bộ chuyển đổi gặp lỗi hình học hoặc thiếu bộ nhớ. Hãy giảm số tam giác/sửa STL rồi thử lại.';
     postMessage({type:'error',id,msg});
