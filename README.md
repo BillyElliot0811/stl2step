@@ -20,7 +20,7 @@ Bật mặc định trước bước nhận dạng và xuất STEP: loại tam g
 
 **Vá lỗ nhỏ có biên phẳng** là tùy chọn riêng, mặc định tắt: bật khi biết STL bị thiếu mặt; kích thước mặc định **1 mm**, cho phép 0.001–10 mm, đo bằng khoảng cách xa nhất giữa hai đỉnh biên. Chỉ vá vòng biên đơn phẳng không lồng nhau, không chồng/cắt hình học hiện có; có giới hạn số đỉnh, số vòng, ngân sách kiểm tra và tổng số tam giác. Miệng hốc thiết kế cũng có thể có biên như vậy, nên người dùng cần xác nhận mục đích và xem vùng vá trong CAD. Không tái tạo phần cong bị mất bằng nắp phẳng.
 
-Kết quả báo số đỉnh ghép, tam giác sửa hướng/loại bỏ, số lỗ và tam giác thêm, cùng các cạnh lỗi còn lại. Topology kín chưa chứng minh lưới không tự giao. Cạnh/đỉnh non-manifold còn lại sẽ chặn nhận dạng và tạo solid. File Chesam.stl không có cạnh biên hở, nhưng có 4 cạnh non-manifold; vá lỗ không giải quyết lỗi đó.
+Kết quả báo số đỉnh ghép, tam giác sửa hướng/loại bỏ, số lỗ và tam giác thêm, cùng các cạnh lỗi còn lại. Topology kín chưa chứng minh lưới không tự giao. Cạnh/đỉnh non-manifold còn lại sẽ chặn nhận dạng và tạo solid. File Chesam.stl không có cạnh biên hở; 4 cạnh non-manifold của mẫu được xử lý bằng tùy chọn sửa cạnh chạm bên dưới.
 
 ## Nhận dạng mặt cong (thử nghiệm)
 
@@ -40,7 +40,7 @@ Các file ứng dụng nằm ở gốc repo; `.nojekyll` cho phép phục vụ t
 
 Sau khi commit thay đổi vào `main`, chờ lần triển khai trong tab **Actions** thành công rồi tải lại trang. Nếu trình duyệt còn cache bản cũ, dùng Ctrl+F5. Khi sửa JavaScript lần tiếp theo, tăng chuỗi phiên bản trong các URL JavaScript được thay đổi trong HTML và Worker.
 
-Cần giữ đủ `index.html`, `app.js`, `stl.js`, `worker.js`, `oc.js`, `oc.wasm`, `mesh-qa.js`, `recognize.js`, `analytic-builder.js`, `preprocess.js` cùng thư mục. Không đưa `oc.wasm` vào Git LFS vì trang cần tải trực tiếp nội dung WASM.
+Cần giữ đủ `index.html`, `app.js`, `stl.js`, `worker.js`, `oc.js`, `oc.wasm`, `mesh-qa.js`, `recognize.js`, `analytic-builder.js`, `preprocess.js`, `contact-detect.js`, `contact-kernel.js` cùng thư mục. Không đưa `oc.wasm` vào Git LFS vì trang cần tải trực tiếp nội dung WASM.
 
 ## Chạy trên máy
 
@@ -56,4 +56,14 @@ Xem [HUONG-DAN.md](HUONG-DAN.md) để biết tùy chọn, giới hạn và các
 
 Bản nhận dạng có thêm 18 ca hình học (mẫu thực, xoay/tịnh tiến/đổi tỉ lệ, hai mô hình tổng hợp khác kích thước, lưới thô và các trường hợp từ chối) và 4 kiểm tra Worker cho lựa chọn/tự quay về mặt lưới. STEP mẫu thực được đọc lại để kiểm tra một solid hợp lệ với các mặt trụ, mặt cầu và cạnh tròn thật. Vẫn cần xác nhận từng STL thực tế trong phần mềm CAD đích.
 
-Bước tiền xử lý được kiểm tra bằng 23 ca hình học và 8 ca Worker/WASM, cùng 34 ca Worker cũ. Mẫu thiếu một tam giác được vá thành solid, mẫu tốt giữ nguyên, mẫu Chesam giữ cảnh báo non-manifold.
+Bước tiền xử lý được kiểm tra bằng 23 ca hình học và 8 ca Worker/WASM, cùng 34 ca Worker cũ. Mẫu thiếu một tam giác được vá thành solid, mẫu tốt giữ nguyên, mẫu Chesam giữ cảnh báo non-manifold khi tắt sửa cạnh chạm.
+
+## Sửa cạnh chạm gây lỗi khối (thử nghiệm)
+
+Tùy chọn bật mặc định cùng tiền xử lý. Nhận dạng nhóm cạnh có đúng 4 mặt kề ở chỗ hai đầu họa tiết đùn chạm nhau, kiểm tra hướng mặt, liên thông, khoảng cách đến chi tiết khác và giao nhau của tam giác. Không áp dụng cho mọi lưới non-manifold, chuỗi cạnh lỗi hoặc mặt tự giao. Giới hạn tối đa 16 cạnh và ngân sách kiểm tra.
+
+Cách sửa tạo rãnh trụ nhỏ dọc cạnh chạm, **có thay đổi hình học**. Sai lệch đặt mặc định 0.01 mm (0.001–0.05 mm); bán kính rãnh bằng nửa giá trị này. Toàn bộ dụng cụ cắt nằm trong khoảng căn(2) lần bán kính quanh đoạn cạnh gốc; đây là giới hạn vùng chỉnh sửa, không phải chứng minh khoảng cách Hausdorff toàn mô hình. Có thể tắt tùy chọn để giữ tuyệt đối hình học lưới.
+
+Chỉ chấp nhận nếu phép cắt tạo đúng một solid hợp lệ, một shell kín, thể tích dương, kích thước bao giữ nguyên trong sai số kernel, mức đổi thể tích không quá 0.01%. Nếu thất bại, giữ luồng mặt/vỏ và báo lỗi; không bỏ bớt khối để ép thành solid. Công cụ không có bộ kiểm tra tự giao chính xác toàn bộ B-rep trong runtime này.
+
+Mẫu Chesam: 4 rãnh R0.005 mm, xuất một solid kín hợp lệ 614 mặt sau gộp đồng phẳng. Các mặt cong gốc của mẫu này vẫn giữ dạng mặt lưới; 4 mặt trụ mới thuộc rãnh sửa. Mẫu nap nam cham vẫn nhận dạng 25 mặt giải tích như trước.

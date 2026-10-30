@@ -15,7 +15,7 @@ onmessage = async ({data:job}) => {
   const outputPath = '/out.step';
   try {
     say('Đang kiểm tra file STL…');
-    importScripts('stl.js?v=20261029-pre1');
+    importScripts('stl.js?v=20261030-contact1');
     const tol = job.tol;
     if (typeof tol !== 'number' || !Number.isFinite(tol) || tol < 1e-7 || tol > 1) throw new Error('Dung sai phải từ 0,0000001 đến 1 mm.');
     const parsed = STL.parse(job.buffer, Boolean(job.repairMesh));
@@ -23,24 +23,34 @@ onmessage = async ({data:job}) => {
     job.buffer = null;
     const warnings = [];
     if (parsed.skipped) warnings.push('Đã loại ' + parsed.skipped.toLocaleString('vi-VN') + ' tam giác suy biến hoặc trùng lặp.');
-    importScripts('mesh-qa.js?v=20261029-pre1','preprocess.js?v=20261029-pre1');
+    importScripts('mesh-qa.js?v=20261030-contact1','preprocess.js?v=20261030-contact1');
     if (job.fillHoles && !job.repairMesh) throw new Error('Cần bật tiền xử lý trước khi vá lỗ.');
-    let preprocessing = null, inputTopology;
+    let preprocessing = null, inputTopology, contactCandidate = null, contactRepair = null, preIssueWarnings = [], curveIssueWarning = null;
     if (job.repairMesh) {
       say('Đang tiền xử lý: ghép đỉnh, sửa hướng mặt và kiểm tra biên hở…');
       const pre = MeshPreprocess.process(parsed.triangles,{weldTolerance:Math.min(tol,1e-4),fillHoles:Boolean(job.fillHoles),maxHoleDiameter:job.maxHoleDiameter === undefined ? 1 : job.maxHoleDiameter,maxTriangles:STL.MAX_TRIANGLES});
       parsed.triangles = pre.triangles; preprocessing = pre.report; inputTopology = pre.report.after;
-      warnings.push(...pre.warnings);
+      preIssueWarnings = pre.warnings; warnings.push(...pre.warnings);
     } else inputTopology = MeshPreprocess.analyze(parsed.triangles);
     const topologySafe = inputTopology.nonmanifoldEdges === 0 && inputTopology.pinchedVertices === 0;
+    if (job.repairMesh && job.repairContacts !== false) {
+      const t = job.contactTolerance === undefined ? .01 : job.contactTolerance;
+      if (typeof t !== 'number' || !Number.isFinite(t) || t < .001 || t > .05) throw new Error('Sai lệch sửa cạnh chạm phải từ 0,001 đến 0,05 mm.');
+      if (!topologySafe) {
+        say('Đang phân tích các cạnh chạm có bề dày bằng 0…');
+        importScripts('contact-detect.js?v=20261030-contact1');
+        contactCandidate = ContactDetection.detect(parsed.triangles,{tolerance:t,maxContacts:16});
+        if (!contactCandidate.eligible) warnings.push('Các cạnh lỗi chưa thuộc nhóm có thể sửa tự động; giữ dạng mặt/vỏ.');
+      }
+    }
     if (!topologySafe && !preprocessing) warnings.push('Lưới còn cạnh/đỉnh bất thường; giữ dạng mặt/vỏ để tránh tạo khối sai.');
     let recovered = null;
     if (job.recoverCurves) {
       if (job.curveTolerance !== undefined && (typeof job.curveTolerance !== 'number' || !Number.isFinite(job.curveTolerance) || job.curveTolerance < 0.0001 || job.curveTolerance > 0.1)) throw new Error('Sai lệch nhận dạng phải từ 0,0001 đến 0,1 mm.');
       say('Đang nhận dạng lỗ tròn và bo cơ bản…');
-      importScripts('recognize.js?v=20261029-pre1');
+      importScripts('recognize.js?v=20261030-contact1');
       recovered = topologySafe ? CurveRecognition.recognize(parsed.triangles,{tolerance:job.curveTolerance}) : {ok:false,reason:'Lưới còn cạnh hoặc đỉnh non-manifold sau tiền xử lý.'};
-      if (!recovered.ok) warnings.push('Giữ mặt lưới vì chưa nhận dạng được mặt cong an toàn: ' + recovered.reason);
+      if (!recovered.ok) {curveIssueWarning = 'Giữ mặt lưới vì chưa nhận dạng được mặt cong an toàn: ' + recovered.reason; warnings.push(curveIssueWarning);}
     }
     say('Đang nạp bộ chuyển đổi (oc.wasm khoảng 63 MiB ở lần đầu)…');
     importScripts('oc.js');
@@ -108,7 +118,7 @@ onmessage = async ({data:job}) => {
     let result, faces, allSolid, solids = 0, openShells = 0, reconstruction = null;
     if (recovered && recovered.ok) {
       say('Đang dựng mặt trụ, cung tròn và fillet giải tích…');
-      importScripts('analytic-builder.js?v=20261029-pre1');
+      importScripts('analytic-builder.js?v=20261030-contact1');
       try {
         const analytic = AnalyticBuilder.build(oc,recovered.model,keep);
         if (Math.abs(analytic.stats.volume-recovered.diagnostics.analyticVolume) > Math.max(1e-6,recovered.diagnostics.analyticVolume*1e-6)) throw new Error('Thể tích B-rep không khớp mô hình nhận dạng.');
@@ -146,7 +156,22 @@ onmessage = async ({data:job}) => {
     if (sewing.NbDeletedFaces() > 0) throw new Error('Dung sai làm mất mặt nhỏ khi khâu. Hãy giảm dung sai và thử lại.');
     let shape = keep(sewing.SewedShape());
     if (shape.IsNull() || !count(shape,types.TopAbs_FACE)) throw new Error('Không tạo được hình học từ lưới STL.');
-    const multipleEdges = sewing.NbMultipleEdges();
+    let multipleEdges = sewing.NbMultipleEdges();
+    if (contactCandidate && contactCandidate.eligible && count(shape,types.TopAbs_SHELL) === 1) {
+      say('Đang tách các cạnh chạm bằng rãnh nhỏ trong sai lệch cho phép…');
+      importScripts('contact-kernel.js?v=20261030-contact1');
+      const candidates = parts(shape,types.TopAbs_SHELL);
+      try {
+        const rawShell = keep(oc.TopoDS.Shell_1(candidates[0]));
+        const repair = ContactKernel.build(oc,rawShell,contactCandidate,{tolerance:job.contactTolerance === undefined ? .01 : job.contactTolerance},keep);
+        shape = repair.shape; contactRepair = repair.stats; multipleEdges = 0;
+        for (let i=warnings.length-1;i>=0;i--) if (preIssueWarnings.includes(warnings[i]) || warnings[i] === curveIssueWarning) warnings.splice(i,1);
+        if (job.recoverCurves) warnings.push('Đã sửa được khối; các vùng cong gốc chưa thuộc nhóm nhận dạng vẫn giữ dạng mặt lưới.');
+      } catch (error) {
+        if (typeof error === 'number' || error instanceof WebAssembly.RuntimeError) throw error;
+        warnings.push('Chưa sửa được cạnh chạm an toàn; giữ mặt/vỏ. ' + (error.message || ''));
+      }
+    }
     if (multipleEdges) warnings.push('Lưới có cạnh dùng chung bất thường (non-manifold); kết quả được giữ dạng mặt/vỏ.');
     if (job.refine) {
       say('Đang gộp các mặt đồng phẳng…');
@@ -155,7 +180,12 @@ onmessage = async ({data:job}) => {
       unify.SetAngularTolerance(1e-10);
       unify.Build();
       const refined = keep(unify.Shape());
-      if (!refined.IsNull() && count(refined,types.TopAbs_FACE) && valid(refined)) shape = refined;
+      let refineSafe = !refined.IsNull() && count(refined,types.TopAbs_FACE) && valid(refined);
+      if (refineSafe && contactRepair) {
+        const p = keep(new oc.GProp_GProps_1()); oc.BRepGProp.VolumeProperties_1(refined,p,true,false,false);
+        refineSafe = Math.abs(p.Mass()-contactRepair.volume) <= Math.max(1e-7,contactRepair.volume*1e-9);
+      }
+      if (refineSafe) shape = refined;
       else warnings.push('Không gộp được mặt an toàn; giữ nguyên các mặt đã khâu.');
     }
     say('Đang kiểm tra vỏ kín và tạo khối…');
@@ -181,7 +211,7 @@ onmessage = async ({data:job}) => {
       if (orientationSafe) shell = fixed;
       else warnings.push('Không thể sửa hướng mặt an toàn cho một vỏ; giữ nguyên vỏ đó.');
       let madeSolid = false;
-      if (topologySafe && orientationSafe && !multipleEdges && shells.length <= 256 && !ambiguous.has(i) && oc.BRep_Tool.IsClosed_1(shell) && valid(shell)) {
+      if ((topologySafe || contactRepair) && orientationSafe && !multipleEdges && shells.length <= 256 && !ambiguous.has(i) && oc.BRep_Tool.IsClosed_1(shell) && valid(shell)) {
         const maker = keep(new oc.BRepBuilderAPI_MakeSolid_3(shell));
         if (maker.IsDone()) {
           const solid = keep(maker.Solid());
@@ -200,6 +230,8 @@ onmessage = async ({data:job}) => {
     faces = count(result,types.TopAbs_FACE);
     if (!faces) throw new Error('Kết quả không chứa mặt nào.');
     allSolid = solids > 0 && openShells === 0 && looseFaces.length === 0;
+    if (contactRepair && !allSolid) throw new Error('Không xác nhận được khối kín sau sửa cạnh chạm.');
+    if (contactRepair) contactRepair.finalFaces = faces;
     if (!allSolid) warnings.push('Kết quả có mặt/vỏ chưa tạo thành khối. Hãy kiểm tra độ kín trong phần mềm CAD.');
     }
     say('Đang xuất file STEP…');
@@ -211,7 +243,7 @@ onmessage = async ({data:job}) => {
     const bytes = oc.FS.readFile(outputPath);
     if (bytes.length < 100 || !new TextDecoder().decode(bytes.subarray(0,40)).includes('ISO-10303-21')) throw new Error('File STEP xuất ra rỗng hoặc không hợp lệ.');
     const output = bytes.slice().buffer;
-    postMessage({type:'done',id,data:output,info:{triangles:parsed.total,faces,solid:allSolid,solids,shells:openShells,skipped:parsed.skipped,warnings,reconstruction,preprocessing,inputTopology}},[output]);
+    postMessage({type:'done',id,data:output,info:{triangles:parsed.total,faces,solid:allSolid,solids,shells:openShells,skipped:parsed.skipped,warnings,reconstruction,preprocessing,inputTopology,contactRepair,contactDetection:contactCandidate ? {eligible:contactCandidate.eligible,reason:contactCandidate.reason,contacts:contactCandidate.contacts.length} : null}},[output]);
   } catch (err) {
     const msg = err && err.message ? err.message : 'Bộ chuyển đổi gặp lỗi hình học hoặc thiếu bộ nhớ. Hãy giảm số tam giác/sửa STL rồi thử lại.';
     postMessage({type:'error',id,msg});

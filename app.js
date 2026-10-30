@@ -63,6 +63,10 @@
     if (fillHoles && (!$('maxHoleDiameter').value.trim() || !Number.isFinite(maxHoleDiameter) || maxHoleDiameter < .001 || maxHoleDiameter > 10)) {
       log('Nhập kích thước lỗ vá từ 0,001 đến 10 mm.','error');$('maxHoleDiameter').focus();return;
     }
+    const repairContacts = repairMesh && $('repairContacts').checked, contactTolerance = Number($('contactTolerance').value);
+    if (repairContacts && (!$('contactTolerance').value.trim() || !Number.isFinite(contactTolerance) || contactTolerance < .001 || contactTolerance > .05)) {
+      log('Nhập sai lệch sửa cạnh chạm từ 0,001 đến 0,05 mm.','error');$('contactTolerance').focus();return;
+    }
     clearDownload();
     const job = {id:++sequence,file:selectedFile,worker:null,boot:null,deadline:null};
     const refine = $('refine').checked;
@@ -71,7 +75,7 @@
     try {
       const buffer = await job.file.arrayBuffer();
       if (active !== job) return;
-      const worker = job.worker = new Worker('worker.js?v=20261029-pre1');
+      const worker = job.worker = new Worker('worker.js?v=20261030-contact1');
       job.boot = setTimeout(()=>fail(job,'Bộ chuyển đổi không phản hồi. Kiểm tra các file chương trình và thư viện có được phục vụ qua HTTP(S).'),45000);
       worker.onerror = e => {e.preventDefault();console.error('Worker error:',e.message);fail(job,'Không khởi chạy được bộ chuyển đổi. Kiểm tra các file thư viện và chạy web qua HTTP(S), sau đó thử lại.');};
       worker.onmessageerror = () => fail(job,'Không đọc được phản hồi của bộ chuyển đổi. Hãy thử lại.');
@@ -94,23 +98,27 @@
             log('Hoàn tất: ' + number(i.triangles) + ' tam giác → ' + number(i.faces) + ' mặt.\n' +
               (i.solid ? number(i.solids) + ' khối kín (solid).' : 'Kết quả có mặt/vỏ chưa tạo thành khối kín.') +
               (i.reconstruction ? '\nĐã dựng mặt cong thật: lỗ Ø' + Number(i.reconstruction.pocketDiameter).toLocaleString('vi-VN',{maximumFractionDigits:4}) + ' mm; bo R' + Number(i.reconstruction.filletRadius).toLocaleString('vi-VN',{maximumFractionDigits:4}) + ' mm.\nSai lệch lấy mẫu hai chiều: ' + Number(i.reconstruction.sampledMax).toLocaleString('vi-VN',{maximumFractionDigits:5}) + ' mm.' : '') +
-              (i.preprocessing ? '\nTiền xử lý: ghép ' + number(i.preprocessing.weldedVertices) + ' đỉnh; loại ' + number(i.preprocessing.removedTriangles) + ' mặt lỗi; sửa hướng ' + number(i.preprocessing.flippedTriangles) + ' tam giác; vá ' + number(i.preprocessing.holesFilled) + ' lỗ (thêm ' + number(i.preprocessing.trianglesAdded) + ' tam giác).\nCòn ' + number(i.preprocessing.after.boundaryEdges) + ' cạnh biên hở và ' + number(i.preprocessing.after.nonmanifoldEdges) + ' cạnh bất thường.' : '') +
+              (i.preprocessing ? '\nTiền xử lý: ghép ' + number(i.preprocessing.weldedVertices) + ' đỉnh; loại ' + number(i.preprocessing.removedTriangles) + ' mặt lỗi; sửa hướng ' + number(i.preprocessing.flippedTriangles) + ' tam giác; vá ' + number(i.preprocessing.holesFilled) + ' lỗ (thêm ' + number(i.preprocessing.trianglesAdded) + ' tam giác).\nSau bước xử lý lưới: ' + number(i.preprocessing.after.boundaryEdges) + ' cạnh biên hở và ' + number(i.preprocessing.after.nonmanifoldEdges) + ' cạnh bất thường.' : '') +
+              (i.contactRepair ? '\nĐã sửa ' + number(i.contactRepair.contacts) + ' cạnh chạm bằng rãnh R' + Number(i.contactRepair.radius).toLocaleString('vi-VN',{maximumFractionDigits:5}) + ' mm.\nVùng thay đổi nằm trong ' + Number(i.contactRepair.localEditBound).toLocaleString('vi-VN',{maximumFractionDigits:5}) + ' mm quanh cạnh gốc; thể tích đổi ' + (100*i.contactRepair.relativeVolumeChange).toLocaleString('vi-VN',{maximumFractionDigits:8}) + '%.' : '') +
               (i.skipped ? '\nĐã loại ' + number(i.skipped) + ' tam giác suy biến hoặc trùng lặp.' : ''), i.solid ? 'success' : 'warning');
             for (const warning of (Array.isArray(i.warnings) ? i.warnings : [])) {const li=document.createElement('li');li.textContent=String(warning);$('warnings').append(li);}
           } catch { clearDownload();log('Không tạo được liên kết tải xuống. Có thể trình duyệt thiếu bộ nhớ. Hãy thử file nhỏ hơn.','error'); }
         }
       };
-      worker.postMessage({type:'convert',id:job.id,buffer,tol,refine,repairMesh,fillHoles,maxHoleDiameter,recoverCurves,curveTolerance},[buffer]);
+      worker.postMessage({type:'convert',id:job.id,buffer,tol,refine,repairMesh,fillHoles,maxHoleDiameter,repairContacts,contactTolerance,recoverCurves,curveTolerance},[buffer]);
     } catch (err) { fail(job,'Không đọc hoặc khởi chạy được file. Hãy chọn lại file và thử lại.');console.error(err); }
   });
   window.addEventListener('pagehide',()=>{if (active) finish(active);clearDownload();});
   $('recoverCurves').addEventListener('change',()=>{$('curveTolerance').disabled=!$('recoverCurves').checked;});
   function repairOptions() {
     $('fillHoles').disabled = !$('repairMesh').checked;
+    $('repairContacts').disabled = !$('repairMesh').checked;
+    $('contactTolerance').disabled = !$('repairMesh').checked || !$('repairContacts').checked;
     $('maxHoleDiameter').disabled = !$('repairMesh').checked || !$('fillHoles').checked;
   }
   $('repairMesh').addEventListener('change',repairOptions);
   $('fillHoles').addEventListener('change',repairOptions);
+  $('repairContacts').addEventListener('change',repairOptions);
   repairOptions();
   busy(false);
   if (location.protocol === 'file:') log('Cần mở web qua HTTP(S). Trong thư mục chương trình, bấm CHAY-WEB.cmd; không mở trực tiếp index.html.','error');

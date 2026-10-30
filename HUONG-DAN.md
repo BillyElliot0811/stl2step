@@ -28,7 +28,7 @@ Máy chủ chỉ lắng nghe trên `127.0.0.1`. Nội dung STL không được g
 - Tiền xử lý bật mặc định: loại tam giác suy biến/trùng, ghép đỉnh biên gần nhau trong dung sai khâu nhưng tối đa 0.0001 mm, sửa hướng mặt, kiểm tra cạnh/đỉnh non-manifold. Lưới tốt giữ nguyên tọa độ. Tắt tùy chọn thì STL có mặt suy biến/trùng bị từ chối.
 - Vá lỗ nhỏ có biên phẳng là tùy chọn riêng, mặc định tắt. Chỉ bật nếu biết STL thiếu mặt; kích thước lỗ mặc định 1 mm, cho phép 0.001–10 mm, đo bằng khoảng cách xa nhất giữa hai đỉnh biên. Có thể bít nhầm miệng hốc thiết kế, nên kiểm tra vùng vá trong CAD.
 - Không vá biên lớn, tự cắt, lồng nhau, không phẳng, phân nhánh, hoặc mặt vá chạm/cắt hình học khác. Giới hạn tối đa 256 đỉnh/vòng, 128 vòng và ngân sách kiểm tra; không vượt 20.000 tam giác sau vá. Không tự xóa mặt non-manifold hoặc tái tạo fillet bị mất.
-- Kết quả báo số đỉnh ghép, mặt loại/sửa hướng, số lỗ và tam giác thêm, cạnh biên/cạnh bất thường còn lại. Topology kín không bảo đảm không tự giao; vẫn kiểm tra B-rep trước khi báo solid. Chesam.stl không có biên hở để vá, còn 4 cạnh non-manifold nên giữ dạng vỏ.
+- Kết quả báo số đỉnh ghép, mặt loại/sửa hướng, số lỗ và tam giác thêm, cạnh biên/cạnh bất thường còn lại. Topology kín không bảo đảm không tự giao; vẫn kiểm tra B-rep trước khi báo solid. Chesam.stl không có biên hở để vá; tùy chọn sửa cạnh chạm xử lý riêng 4 cạnh tiếp xúc suy biến của mẫu này.
 
 ## Hiểu đúng file STEP
 
@@ -74,3 +74,13 @@ Có thể đưa các file ứng dụng lên máy chủ tĩnh HTTP(S). Đường 
 ## Kiểm tra bản sửa ngày 27/10/2026
 
 Có kiểm tra bằng runtime WASM thật và Chrome: ASCII/nhị phân, mô hình kín/hở, đảo hướng mặt, tam giác lỗi, nhiều khối, dung sai lỗi, giới hạn tài nguyên, hủy/thử lại và thư viện bị thiếu. STEP xuất ra được đọc ngược lại để so số mặt, số khối và thể tích mẫu. Đây là kiểm tra với mẫu tổng hợp; chưa thay thế việc xác nhận từng STL thực tế trong phần mềm CAD đích.
+
+## Sửa cạnh chạm gây lỗi khối (thử nghiệm)
+
+Tùy chọn bật mặc định cùng tiền xử lý. Nhận dạng nhóm cạnh có đúng 4 mặt kề ở chỗ hai đầu họa tiết đùn chạm nhau, kiểm tra hướng mặt, liên thông, khoảng cách đến chi tiết khác và giao nhau của tam giác. Không áp dụng cho mọi lưới non-manifold, chuỗi cạnh lỗi hoặc mặt tự giao. Giới hạn tối đa 16 cạnh và ngân sách kiểm tra.
+
+Cách sửa tạo rãnh trụ nhỏ dọc cạnh chạm, **có thay đổi hình học**. Sai lệch đặt mặc định 0.01 mm (0.001–0.05 mm); bán kính rãnh bằng nửa giá trị này. Toàn bộ dụng cụ cắt nằm trong khoảng căn(2) lần bán kính quanh đoạn cạnh gốc; đây là giới hạn vùng chỉnh sửa, không phải chứng minh khoảng cách Hausdorff toàn mô hình. Có thể tắt tùy chọn để giữ tuyệt đối hình học lưới.
+
+Chỉ chấp nhận nếu phép cắt tạo đúng một solid hợp lệ, một shell kín, thể tích dương, kích thước bao giữ nguyên trong sai số kernel, mức đổi thể tích không quá 0.01%. Nếu thất bại, giữ luồng mặt/vỏ và báo lỗi; không bỏ bớt khối để ép thành solid. Công cụ không có bộ kiểm tra tự giao chính xác toàn bộ B-rep trong runtime này.
+
+Mẫu Chesam: 4 rãnh R0.005 mm, xuất một solid kín hợp lệ 614 mặt sau gộp đồng phẳng. Các mặt cong gốc của mẫu này vẫn giữ dạng mặt lưới; 4 mặt trụ mới thuộc rãnh sửa. Mẫu nap nam cham vẫn nhận dạng 25 mặt giải tích như trước.
