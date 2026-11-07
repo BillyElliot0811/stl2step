@@ -75,7 +75,7 @@
     try {
       const buffer = await job.file.arrayBuffer();
       if (active !== job) return;
-      const worker = job.worker = new Worker('worker.js?v=20261030-contact1');
+      const worker = job.worker = new Worker('worker.js?v=20261107-curves2');
       job.boot = setTimeout(()=>fail(job,'Bộ chuyển đổi không phản hồi. Kiểm tra các file chương trình và thư viện có được phục vụ qua HTTP(S).'),45000);
       worker.onerror = e => {e.preventDefault();console.error('Worker error:',e.message);fail(job,'Không khởi chạy được bộ chuyển đổi. Kiểm tra các file thư viện và chạy web qua HTTP(S), sau đó thử lại.');};
       worker.onmessageerror = () => fail(job,'Không đọc được phản hồi của bộ chuyển đổi. Hãy thử lại.');
@@ -97,7 +97,7 @@
             const i = m.info;
             log('Hoàn tất: ' + number(i.triangles) + ' tam giác → ' + number(i.faces) + ' mặt.\n' +
               (i.solid ? number(i.solids) + ' khối kín (solid).' : 'Kết quả có mặt/vỏ chưa tạo thành khối kín.') +
-              (i.reconstruction ? '\nĐã dựng mặt cong thật: lỗ Ø' + Number(i.reconstruction.pocketDiameter).toLocaleString('vi-VN',{maximumFractionDigits:4}) + ' mm; bo R' + Number(i.reconstruction.filletRadius).toLocaleString('vi-VN',{maximumFractionDigits:4}) + ' mm.\nSai lệch lấy mẫu hai chiều: ' + Number(i.reconstruction.sampledMax).toLocaleString('vi-VN',{maximumFractionDigits:5}) + ' mm.' : '') +
+              (i.reconstruction?.method === 'circular-extrusion-bands' ? '\nĐã dựng lại ' + number(i.reconstruction.bands) + ' dải cung tròn thành mặt trụ; ' + number(i.reconstruction.splineBands || 0) + ' dải spline.\nSai lệch spline lấy mẫu: ' + Number(i.reconstruction.splineSampledMax || 0).toLocaleString('vi-VN',{maximumFractionDigits:5}) + ' mm.\nSai lệch cung so với dây lưới tối đa: ' + Number(i.reconstruction.maxChordDeviation).toLocaleString('vi-VN',{maximumFractionDigits:5}) + ' mm; thể tích tổng đổi ' + (100*i.reconstruction.relativeVolumeChange).toLocaleString('vi-VN',{maximumFractionDigits:5}) + '%.' : i.reconstruction ? '\nĐã dựng mặt cong thật: lỗ Ø' + Number(i.reconstruction.pocketDiameter).toLocaleString('vi-VN',{maximumFractionDigits:4}) + ' mm; bo R' + Number(i.reconstruction.filletRadius).toLocaleString('vi-VN',{maximumFractionDigits:4}) + ' mm.\nSai lệch lấy mẫu hai chiều: ' + Number(i.reconstruction.sampledMax).toLocaleString('vi-VN',{maximumFractionDigits:5}) + ' mm.' : '') +
               (i.preprocessing ? '\nTiền xử lý: ghép ' + number(i.preprocessing.weldedVertices) + ' đỉnh; loại ' + number(i.preprocessing.removedTriangles) + ' mặt lỗi; sửa hướng ' + number(i.preprocessing.flippedTriangles) + ' tam giác; vá ' + number(i.preprocessing.holesFilled) + ' lỗ (thêm ' + number(i.preprocessing.trianglesAdded) + ' tam giác).\nSau bước xử lý lưới: ' + number(i.preprocessing.after.boundaryEdges) + ' cạnh biên hở và ' + number(i.preprocessing.after.nonmanifoldEdges) + ' cạnh bất thường.' : '') +
               (i.contactRepair ? '\nĐã sửa ' + number(i.contactRepair.contacts) + ' cạnh chạm bằng rãnh R' + Number(i.contactRepair.radius).toLocaleString('vi-VN',{maximumFractionDigits:5}) + ' mm.\nVùng thay đổi nằm trong ' + Number(i.contactRepair.localEditBound).toLocaleString('vi-VN',{maximumFractionDigits:5}) + ' mm quanh cạnh gốc; thể tích đổi ' + (100*i.contactRepair.relativeVolumeChange).toLocaleString('vi-VN',{maximumFractionDigits:8}) + '%.' : '') +
               (i.skipped ? '\nĐã loại ' + number(i.skipped) + ' tam giác suy biến hoặc trùng lặp.' : ''), i.solid ? 'success' : 'warning');

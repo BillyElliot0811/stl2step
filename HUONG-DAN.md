@@ -83,4 +83,15 @@ Cách sửa tạo rãnh trụ nhỏ dọc cạnh chạm, **có thay đổi hình
 
 Chỉ chấp nhận nếu phép cắt tạo đúng một solid hợp lệ, một shell kín, thể tích dương, kích thước bao giữ nguyên trong sai số kernel, mức đổi thể tích không quá 0.01%. Nếu thất bại, giữ luồng mặt/vỏ và báo lỗi; không bỏ bớt khối để ép thành solid. Công cụ không có bộ kiểm tra tự giao chính xác toàn bộ B-rep trong runtime này.
 
-Mẫu Chesam: 4 rãnh R0.005 mm, xuất một solid kín hợp lệ 614 mặt sau gộp đồng phẳng. Các mặt cong gốc của mẫu này vẫn giữ dạng mặt lưới; 4 mặt trụ mới thuộc rãnh sửa. Mẫu nap nam cham vẫn nhận dạng 25 mặt giải tích như trước.
+Mẫu Chesam: 4 rãnh R0.005 mm, xuất một solid kín hợp lệ 614 mặt sau gộp đồng phẳng. Khi tắt khôi phục mặt cong, các mặt cong gốc giữ dạng mặt lưới; 4 mặt trụ mới thuộc rãnh sửa. Xem bản khôi phục dải mặt cong bên dưới. Mẫu nap nam cham vẫn nhận dạng 25 mặt giải tích như trước.
+
+
+## Khôi phục dải mặt cong (07/11/2026)
+
+Bật **Khôi phục mặt cong và bo tròn**, giữ sai lệch 0,01 mm. Công cụ nhận dạng các dải mặt đùn có hai biên phẳng, dựng cung tròn thành mặt trụ và dùng spline bậc ba cho các đoạn cong không tròn phù hợp. Các mặt phẳng kề được dựng lại cùng đường biên cong để giữ kín. Không phụ thuộc tên file hoặc trục đặt mẫu.
+
+Chỉ nhận một solid hợp lệ, không bỏ mặt/khối; kiểm tra kích thước bao và thay đổi thể tích tổng tối đa 0,1%. Spline được kiểm tra khoảng cách hai chiều bằng lấy mẫu, không phải chứng minh sai lệch toàn cục. Nhận dạng dải giới hạn 10.000 tam giác, ngân sách thử cung và tối đa 32 dải spline, mỗi dải tối đa 128 đoạn; ngoài giới hạn giữ luồng mặt lưới. Các vùng không đủ điều kiện có thể còn chia mặt.
+
+Mẫu Chesam với cả khôi phục mặt cong và sửa cạnh chạm: 24 dải trụ + 5 dải spline, 1 khối kín, 145 mặt. Mẫu trước chỉ sửa cạnh chạm có 614 mặt. Bốn mặt trụ của rãnh sửa cạnh chạm tách biệt với 24 mặt trụ khôi phục. Dung sai 0,01 mm: sai lệch cung/dây tối đa khoảng 0,00799 mm, sai lệch spline lấy mẫu khoảng 0,00351 mm; thể tích tổng thay đổi khoảng 0,00652%. Không khôi phục lịch sử feature của Inventor.
+
+Khi cập nhật web, cần thêm `strip-curves.js` cùng `worker.js`, `app.js` và `index.html`.

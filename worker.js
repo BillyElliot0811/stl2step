@@ -15,7 +15,7 @@ onmessage = async ({data:job}) => {
   const outputPath = '/out.step';
   try {
     say('Đang kiểm tra file STL…');
-    importScripts('stl.js?v=20261030-contact1');
+    importScripts('stl.js?v=20261107-curves2');
     const tol = job.tol;
     if (typeof tol !== 'number' || !Number.isFinite(tol) || tol < 1e-7 || tol > 1) throw new Error('Dung sai phải từ 0,0000001 đến 1 mm.');
     const parsed = STL.parse(job.buffer, Boolean(job.repairMesh));
@@ -23,7 +23,7 @@ onmessage = async ({data:job}) => {
     job.buffer = null;
     const warnings = [];
     if (parsed.skipped) warnings.push('Đã loại ' + parsed.skipped.toLocaleString('vi-VN') + ' tam giác suy biến hoặc trùng lặp.');
-    importScripts('mesh-qa.js?v=20261030-contact1','preprocess.js?v=20261030-contact1');
+    importScripts('mesh-qa.js?v=20261107-curves2','preprocess.js?v=20261107-curves2');
     if (job.fillHoles && !job.repairMesh) throw new Error('Cần bật tiền xử lý trước khi vá lỗ.');
     let preprocessing = null, inputTopology, contactCandidate = null, contactRepair = null, preIssueWarnings = [], curveIssueWarning = null;
     if (job.repairMesh) {
@@ -38,7 +38,7 @@ onmessage = async ({data:job}) => {
       if (typeof t !== 'number' || !Number.isFinite(t) || t < .001 || t > .05) throw new Error('Sai lệch sửa cạnh chạm phải từ 0,001 đến 0,05 mm.');
       if (!topologySafe) {
         say('Đang phân tích các cạnh chạm có bề dày bằng 0…');
-        importScripts('contact-detect.js?v=20261030-contact1');
+        importScripts('contact-detect.js?v=20261107-curves2');
         contactCandidate = ContactDetection.detect(parsed.triangles,{tolerance:t,maxContacts:16});
         if (!contactCandidate.eligible) warnings.push('Các cạnh lỗi chưa thuộc nhóm có thể sửa tự động; giữ dạng mặt/vỏ.');
       }
@@ -48,7 +48,7 @@ onmessage = async ({data:job}) => {
     if (job.recoverCurves) {
       if (job.curveTolerance !== undefined && (typeof job.curveTolerance !== 'number' || !Number.isFinite(job.curveTolerance) || job.curveTolerance < 0.0001 || job.curveTolerance > 0.1)) throw new Error('Sai lệch nhận dạng phải từ 0,0001 đến 0,1 mm.');
       say('Đang nhận dạng lỗ tròn và bo cơ bản…');
-      importScripts('recognize.js?v=20261030-contact1');
+      importScripts('recognize.js?v=20261107-curves2');
       recovered = topologySafe ? CurveRecognition.recognize(parsed.triangles,{tolerance:job.curveTolerance}) : {ok:false,reason:'Lưới còn cạnh hoặc đỉnh non-manifold sau tiền xử lý.'};
       if (!recovered.ok) {curveIssueWarning = 'Giữ mặt lưới vì chưa nhận dạng được mặt cong an toàn: ' + recovered.reason; warnings.push(curveIssueWarning);}
     }
@@ -118,7 +118,7 @@ onmessage = async ({data:job}) => {
     let result, faces, allSolid, solids = 0, openShells = 0, reconstruction = null;
     if (recovered && recovered.ok) {
       say('Đang dựng mặt trụ, cung tròn và fillet giải tích…');
-      importScripts('analytic-builder.js?v=20261030-contact1');
+      importScripts('analytic-builder.js?v=20261107-curves2');
       try {
         const analytic = AnalyticBuilder.build(oc,recovered.model,keep);
         if (Math.abs(analytic.stats.volume-recovered.diagnostics.analyticVolume) > Math.max(1e-6,recovered.diagnostics.analyticVolume*1e-6)) throw new Error('Thể tích B-rep không khớp mô hình nhận dạng.');
@@ -128,6 +128,20 @@ onmessage = async ({data:job}) => {
       } catch (error) {
         if (typeof error === 'number' || error instanceof WebAssembly.RuntimeError) throw error;
         warnings.push('Không dựng được mặt cong hợp lệ; giữ mặt lưới. ' + (error.message || ''));
+      }
+    }
+    if (!result && job.recoverCurves && (topologySafe || contactCandidate?.eligible)) {
+      say('Đang nhận dạng và dựng lại các dải cung tròn…');
+      importScripts('strip-curves.js?v=20261107-curves2','contact-kernel.js?v=20261107-curves2');
+      try {
+        const smooth = StripCurves.build(oc,parsed.triangles,{tolerance:job.curveTolerance,contactCandidate,contactTolerance:job.contactTolerance},keep);
+        result=smooth.shape;faces=smooth.faces;solids=1;allSolid=true;reconstruction=smooth.stats;contactRepair=smooth.contactRepair;
+        for(let i=warnings.length-1;i>=0;i--)if(warnings[i]===curveIssueWarning || (contactRepair && preIssueWarnings.includes(warnings[i])))warnings.splice(i,1);
+        warnings.push('Đã khôi phục các dải cung tròn đủ điều kiện; vùng cong khác có thể vẫn chia mặt.');
+        parsed.triangles.length=0;
+      } catch(error) {
+        if(typeof error==='number'||error instanceof WebAssembly.RuntimeError)throw error;
+        warnings.push('Không áp dụng dựng dải cung tròn: '+error.message);
       }
     }
     if (!result) {
@@ -159,7 +173,7 @@ onmessage = async ({data:job}) => {
     let multipleEdges = sewing.NbMultipleEdges();
     if (contactCandidate && contactCandidate.eligible && count(shape,types.TopAbs_SHELL) === 1) {
       say('Đang tách các cạnh chạm bằng rãnh nhỏ trong sai lệch cho phép…');
-      importScripts('contact-kernel.js?v=20261030-contact1');
+      importScripts('contact-kernel.js?v=20261107-curves2');
       const candidates = parts(shape,types.TopAbs_SHELL);
       try {
         const rawShell = keep(oc.TopoDS.Shell_1(candidates[0]));
