@@ -78,3 +78,12 @@ Chỉ nhận một solid hợp lệ, không bỏ mặt/khối; kiểm tra kích 
 Mẫu Chesam với cả khôi phục mặt cong và sửa cạnh chạm: 24 dải trụ + 5 dải spline, 1 khối kín, 145 mặt. Mẫu trước chỉ sửa cạnh chạm có 614 mặt. Bốn mặt trụ của rãnh sửa cạnh chạm tách biệt với 24 mặt trụ khôi phục. Dung sai 0,01 mm: sai lệch cung/dây tối đa khoảng 0,00799 mm, sai lệch spline lấy mẫu khoảng 0,00351 mm; thể tích tổng thay đổi khoảng 0,00652%. Không khôi phục lịch sử feature của Inventor.
 
 Khi cập nhật web, cần thêm `strip-curves.js` cùng `worker.js`, `app.js` và `index.html`.
+
+
+## Nối vùng bo bị ngắt bởi chữ/chi tiết (08/11/2026)
+
+Thêm `junction-curves.js`: mở rộng mặt trụ lồi khi các đỉnh STL hỗ trợ phần cung còn thiếu, hợp phần bù và dựng lại giao tuyến của các mặt nhỏ. Chỉ áp dụng khi sai lệch cung, một solid/một vỏ kín, thể tích, số mặt và kích thước bao đạt kiểm tra; nếu không đạt thì giữ bản trước bước nối. Giới hạn 10.000 tam giác và tối đa 8 vùng thử. Không phục hồi lịch sử Fillet của Inventor.
+
+Chesam: từ 145 xuống 125 mặt, loại 20 mặt nhỏ quanh chỗ chữ chạm vùng bo; 24 dải trụ và 5 dải spline giữ nguyên. Đọc lại STEP bằng OpenCascade độc lập: một khối kín hợp lệ, kiểm tra tự giao đạt, không còn mặt phẳng theo hướng bán kính trong vùng mối nối đang xét. Khoảng cách từ 46 điểm lấy mẫu STL ở vùng đó tới vỏ STEP tối đa 0,00684 mm (dung sai 0,01 mm); đây là kiểm tra lấy mẫu, không phải chứng minh Hausdorff toàn cục. Thể tích tổng khác STL khoảng 0,00654%.
+
+Triển khai cần đồng thời cập nhật `junction-curves.js`, `strip-curves.js`, `worker.js`, `app.js`, `index.html`.
