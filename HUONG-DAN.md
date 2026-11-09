@@ -101,6 +101,8 @@ Khi cập nhật web, cần thêm `strip-curves.js` cùng `worker.js`, `app.js` 
 
 Thêm `junction-curves.js`: mở rộng mặt trụ lồi khi các đỉnh STL hỗ trợ phần cung còn thiếu, hợp phần bù và dựng lại giao tuyến của các mặt nhỏ. Chỉ áp dụng khi sai lệch cung, một solid/một vỏ kín, thể tích, số mặt và kích thước bao đạt kiểm tra; nếu không đạt thì giữ bản trước bước nối. Giới hạn 10.000 tam giác và tối đa 8 vùng thử. Không phục hồi lịch sử Fillet của Inventor.
 
-Chesam: từ 145 xuống 125 mặt, loại 20 mặt nhỏ quanh chỗ chữ chạm vùng bo; 24 dải trụ và 5 dải spline giữ nguyên. Đọc lại STEP bằng OpenCascade độc lập: một khối kín hợp lệ, kiểm tra tự giao đạt, không còn mặt phẳng theo hướng bán kính trong vùng mối nối đang xét. Khoảng cách từ 46 điểm lấy mẫu STL ở vùng đó tới vỏ STEP tối đa 0,00684 mm (dung sai 0,01 mm); đây là kiểm tra lấy mẫu, không phải chứng minh Hausdorff toàn cục. Thể tích tổng khác STL khoảng 0,00654%.
+Chesam: từ 145 xuống 123 mặt, loại 22 mặt nhỏ quanh chỗ chữ chạm vùng bo; 24 dải trụ và 5 dải spline giữ nguyên. Đọc lại STEP bằng OpenCascade độc lập: một khối kín hợp lệ, kiểm tra tự giao đạt, không còn mặt phẳng theo hướng bán kính trong vùng mối nối đang xét. Khoảng cách từ 46 điểm lấy mẫu STL ở vùng đó tới vỏ STEP tối đa 0,00684 mm (dung sai 0,01 mm); đây là kiểm tra lấy mẫu, không phải chứng minh Hausdorff toàn cục. Thể tích tổng khác STL khoảng 0,00654%.
 
 Triển khai cần đồng thời cập nhật `junction-curves.js`, `strip-curves.js`, `worker.js`, `app.js`, `index.html`.
+
+Bản 20261109-sliver1 gộp thêm mặt phẳng nhỏ gần đồng phẳng ở đầu chữ C bằng kiểm tra mặt kề, sai lệch và khối kín. Đối chiếu cục bộ hai chiều với bản 125 mặt tại hơn 10.000 điểm cho sai lệch lớn nhất 0,00000269 mm; đây là kiểm tra lấy mẫu, không phải chứng minh sai lệch toàn mô hình. Mẫu nắp nam châm vẫn 25 mặt.

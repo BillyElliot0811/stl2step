@@ -53,6 +53,34 @@ function finish(oc,input,triangles,tolerance,keep,normalized=false){
    shape=candidate;finished++;removed+=oldFaces-count;
   }catch(e){if(typeof e==='number'||e instanceof WebAssembly.RuntimeError)throw e;rejected.push(e.message||String(e));}
  }
+ // A Boolean junction can leave tiny, almost coplanar patches at an embossed
+ // detail. Merge only patches sharing an edge with a much larger plane.
+ // Keep this bounded and optional: every unsuccessful pass retains its input.
+ const beforeCleanup=shape;let cleanupRemoved=0;
+ if(finished){
+  try{const writer=keep(new oc.STEPControl_Writer_1());if(writer.Transfer(shape,oc.STEPControl_StepModelType.STEPControl_AsIs,true).value!==1||writer.Write('/c.step').value!==1)throw Error('Cannot normalize planar cleanup');const reader=keep(new oc.STEPControl_Reader_1());if(reader.ReadFile('/c.step').value!==1||reader.TransferRoots()<1)throw Error('Cannot reload planar cleanup');shape=keep(reader.OneShape());}
+  catch(e){if(typeof e==='number'||e instanceof WebAssembly.RuntimeError)throw e;return {shape:beforeCleanup,finished,removed,rejected:[...rejected,e.message||String(e)]};}
+  finally{try{oc.FS.unlink('/c.step');}catch(_){}}
+ }
+ if(finished)for(let pass=0;pass<4;pass++){
+  try{
+   const oldFaces=parts(shape,T.TopAbs_FACE).length;if(oldFaces>512)break;
+   const base=keep(keep(new oc.BRepBuilderAPI_Copy_2(shape,true,false)).Shape()),rows=[];
+   for(const f of parts(base,T.TopAbs_FACE)){
+    const face=keep(oc.TopoDS.Face_1(f)),ad=keep(new oc.BRepAdaptor_Surface_2(face,true));if(ad.GetType().value!==0)continue;
+    const plane=keep(ad.Plane()),normal=xyz(keep(keep(plane.Axis()).Direction())),p=keep(new oc.GProp_GProps_1());oc.BRepGProp.SurfaceProperties_1(face,p,true,false);
+    rows.push({face,plane,normal,area:p.Mass(),edges:parts(face,T.TopAbs_EDGE),vertices:parts(face,T.TopAbs_VERTEX)});
+   }
+   const eps=Math.min(1e-5,tolerance*.001),eligible=rows.filter(a=>a.area>0&&a.vertices.length&&rows.some(b=>b!==a&&b.area>a.area*50&&Math.abs(dot(a.normal,b.normal))>1-5e-9&&a.edges.some(e=>b.edges.some(q=>e.IsSame(q)))&&a.vertices.every(v=>b.plane.Distance_1(keep(oc.BRep_Tool.Pnt(keep(oc.TopoDS.Vertex_1(v)))))<eps)));
+   if(!eligible.length||eligible.length>8)break;
+   const oldVolume=volume(shape),oldBounds=bounds(shape),heal=keep(new oc.BRepAlgoAPI_Defeaturing());heal.SetShape(base);eligible.forEach(a=>heal.AddFaceToRemove(a.face));heal.Build();const next=keep(heal.Shape());
+   if(!valid(next))break;
+   const count=parts(next,T.TopAbs_FACE).length,delta=Math.abs(volume(next)-oldVolume),box=bounds(next);
+   if(count>=oldFaces||delta>Math.min(.001,oldVolume*1e-7)||Math.max(...box.map((v,k)=>Math.abs(v-oldBounds[k])))>eps)break;
+   shape=next;removed+=oldFaces-count;cleanupRemoved+=oldFaces-count;
+  }catch(e){if(typeof e==='number'||e instanceof WebAssembly.RuntimeError)throw e;rejected.push('Planar junction cleanup: '+(e.message||String(e)));break;}
+ }
+ if(!cleanupRemoved)shape=beforeCleanup;
  return {shape,finished,removed,rejected};
 }
 const api={finish};if(typeof module==='object'&&module.exports)module.exports=api;root.JunctionCurves=api;

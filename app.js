@@ -75,7 +75,7 @@
     try {
       const buffer = await job.file.arrayBuffer();
       if (active !== job) return;
-      const worker = job.worker = new Worker('worker.js?v=20261108-junction1');
+      const worker = job.worker = new Worker('worker.js?v=20261109-sliver1');
       job.boot = setTimeout(()=>fail(job,'Bộ chuyển đổi không phản hồi. Kiểm tra các file chương trình và thư viện có được phục vụ qua HTTP(S).'),45000);
       worker.onerror = e => {e.preventDefault();console.error('Worker error:',e.message);fail(job,'Không khởi chạy được bộ chuyển đổi. Kiểm tra các file thư viện và chạy web qua HTTP(S), sau đó thử lại.');};
       worker.onmessageerror = () => fail(job,'Không đọc được phản hồi của bộ chuyển đổi. Hãy thử lại.');
