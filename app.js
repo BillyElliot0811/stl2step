@@ -7,6 +7,7 @@
   const available = location.protocol !== 'file:' && typeof Worker !== 'undefined' && typeof WebAssembly !== 'undefined';
   function log(text, tone = 'neutral') { $('log').textContent = text; $('statusBox').dataset.tone = tone; }
   function clearDownload() {
+    $('elapsed').hidden = true;
     if (downloadURL) URL.revokeObjectURL(downloadURL);
     downloadURL = null;
     $('dl').removeAttribute('href'); $('dl').removeAttribute('download'); $('downloadBox').hidden = true;
@@ -17,13 +18,21 @@
     $('options').disabled = value;
     $('go').disabled = value || !selectedFile || !available;
     $('cancel').hidden = !value; $('progress').hidden = !value;
+    $('runningHelp').hidden = !value;
     $('statusBox').setAttribute('aria-busy', String(value));
   }
   function finish(job) {
     if (active !== job) return false;
     clearTimeout(job.deadline); clearTimeout(job.boot);
+    clearInterval(job.clock);
+    showElapsed(job);
     if (job.worker) { job.worker.onmessage = null; job.worker.onerror = null; job.worker.onmessageerror = null; job.worker.terminate(); }
     active = null; busy(false); return true;
+  }
+  function showElapsed(job) {
+    const seconds = Math.floor((performance.now() - job.started) / 1000);
+    $('elapsed').textContent = 'Thời gian đã chạy: ' + Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2,'0');
+    $('elapsed').hidden = false;
   }
   function fail(job, message) { if (finish(job)) {clearDownload();log(message,'error');} }
   function focusOption(id) { $('settings').open = true; $(id).focus(); }
@@ -69,9 +78,11 @@
       log('Nhập sai lệch sửa cạnh chạm từ 0,001 đến 0,05 mm.','error');focusOption('contactTolerance');return;
     }
     clearDownload();
-    const job = {id:++sequence,file:selectedFile,worker:null,boot:null,deadline:null};
+    const job = {id:++sequence,file:selectedFile,worker:null,boot:null,deadline:null,clock:null,started:performance.now()};
     const refine = $('refine').checked;
     active = job;busy(true);log('Đang đọc file STL…');
+    showElapsed(job);
+    job.clock = setInterval(() => {if (active === job) showElapsed(job);},1000);
     job.deadline = setTimeout(()=>fail(job,'Tác vụ vượt quá 3 phút và đã dừng để giải phóng bộ nhớ. Hãy giảm số tam giác hoặc thử tắt gộp mặt.'),180000);
     try {
       const buffer = await job.file.arrayBuffer();
