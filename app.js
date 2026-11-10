@@ -26,6 +26,7 @@
     active = null; busy(false); return true;
   }
   function fail(job, message) { if (finish(job)) {clearDownload();log(message,'error');} }
+  function focusOption(id) { $('settings').open = true; $(id).focus(); }
   function pick(files) {
     if (!available || active || !files || !files.length) return;
     clearDownload(); selectedFile = null; busy(false);
@@ -53,19 +54,19 @@
     if (active || !selectedFile || !available) return;
     const tol = Number($('tol').value);
     if (!$('tol').value.trim() || !Number.isFinite(tol) || tol < 1e-7 || tol > 1) {
-      log('Nhập dung sai từ 0,0000001 đến 1 mm.','error');$('tol').focus();return;
+      log('Nhập dung sai từ 0,0000001 đến 1 mm.','error');focusOption('tol');return;
     }
     const recoverCurves = $('recoverCurves').checked, curveTolerance = Number($('curveTolerance').value);
     if (recoverCurves && (!$('curveTolerance').value.trim() || !Number.isFinite(curveTolerance) || curveTolerance < 0.0001 || curveTolerance > 0.1)) {
-      log('Nhập sai lệch nhận dạng từ 0,0001 đến 0,1 mm.','error');$('curveTolerance').focus();return;
+      log('Nhập sai lệch nhận dạng từ 0,0001 đến 0,1 mm.','error');focusOption('curveTolerance');return;
     }
     const repairMesh = $('repairMesh').checked, fillHoles = repairMesh && $('fillHoles').checked, maxHoleDiameter = Number($('maxHoleDiameter').value);
     if (fillHoles && (!$('maxHoleDiameter').value.trim() || !Number.isFinite(maxHoleDiameter) || maxHoleDiameter < .001 || maxHoleDiameter > 10)) {
-      log('Nhập kích thước lỗ vá từ 0,001 đến 10 mm.','error');$('maxHoleDiameter').focus();return;
+      log('Nhập kích thước lỗ vá từ 0,001 đến 10 mm.','error');focusOption('maxHoleDiameter');return;
     }
     const repairContacts = repairMesh && $('repairContacts').checked, contactTolerance = Number($('contactTolerance').value);
     if (repairContacts && (!$('contactTolerance').value.trim() || !Number.isFinite(contactTolerance) || contactTolerance < .001 || contactTolerance > .05)) {
-      log('Nhập sai lệch sửa cạnh chạm từ 0,001 đến 0,05 mm.','error');$('contactTolerance').focus();return;
+      log('Nhập sai lệch sửa cạnh chạm từ 0,001 đến 0,05 mm.','error');focusOption('contactTolerance');return;
     }
     clearDownload();
     const job = {id:++sequence,file:selectedFile,worker:null,boot:null,deadline:null};
