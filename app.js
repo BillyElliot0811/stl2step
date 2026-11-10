@@ -39,6 +39,7 @@
   function pick(files) {
     if (!available || active || !files || !files.length) return;
     clearDownload(); selectedFile = null; busy(false);
+    window.dispatchEvent(new CustomEvent('stl-selected',{detail:null}));
     $('selected').textContent = 'Chưa chọn file · Tối đa 32 MiB và 20.000 tam giác';
     if (files.length !== 1) { log('Vui lòng chọn một file STL mỗi lần.','error'); return; }
     const file = files[0];
@@ -46,6 +47,7 @@
     if (!file.size) {log('File STL rỗng. Hãy chọn file khác.','error');return;}
     if (file.size > MAX_BYTES) {log('File vượt giới hạn 32 MiB. Hãy giảm số tam giác trước.','error');return;}
     selectedFile = file;
+    window.dispatchEvent(new CustomEvent('stl-selected',{detail:file}));
     const sizeText = file.size < 1024 ? number(file.size) + ' byte' : file.size < 1048576 ? (file.size/1024).toLocaleString('vi-VN',{maximumFractionDigits:1}) + ' KiB' : (file.size/1048576).toLocaleString('vi-VN',{maximumFractionDigits:2}) + ' MiB';
     $('selected').textContent = file.name + ' · ' + sizeText;
     busy(false);log('Đã chọn file. Bạn có thể bắt đầu chuyển đổi.');

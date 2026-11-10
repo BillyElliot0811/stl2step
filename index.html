@@ -12,13 +12,16 @@
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}main{max-width:800px;margin:44px auto;padding:0 20px 32px}.eyebrow{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);font-weight:700}h1{font-size:clamp(28px,5vw,38px);line-height:1.2;margin:10px 0}h2{font-size:17px;margin:0 0 12px}.sub{color:var(--muted);margin:0 0 26px}.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:26px;box-shadow:0 6px 28px #17253a08}#drop{border:2px dashed var(--line);background:var(--soft);border-radius:12px;padding:28px 20px;text-align:center}#drop.over{border-color:var(--accent);background:var(--card)}#drop p{margin:0 0 14px}.hint{font-size:13px;color:var(--muted)}#selected{overflow-wrap:anywhere;margin:14px 0 0}button,.download{font:inherit;font-weight:600;border-radius:8px;padding:10px 18px;border:1px solid transparent;cursor:pointer;text-decoration:none;display:inline-block}.download{max-width:100%;overflow-wrap:anywhere}button.primary,.download{background:var(--accent);color:#fff}button.secondary{color:var(--text);background:var(--card);border-color:var(--line)}button:disabled{opacity:.5;cursor:default}:focus-visible{outline:3px solid var(--focus);outline-offset:3px}.options{border:0;padding:22px 0 10px;margin:0}.option{display:flex;gap:10px;align-items:flex-start;margin-bottom:12px}.option input{margin-top:7px;width:17px;height:17px;flex-shrink:0}.tolerance{display:flex;gap:10px;align-items:center;flex-wrap:wrap}input[type=number]{font:inherit;padding:8px;width:155px;background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:7px}.actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:14px 0 20px}#statusBox{border:1px solid var(--line);border-radius:10px;padding:16px;background:var(--soft)}#statusBox[data-tone=error]{border-color:var(--error)}#statusBox[data-tone=success]{border-color:var(--good)}#statusBox[data-tone=warning]{border-color:var(--warn)}#log{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px}progress{width:100%;height:6px;margin:0 0 12px;accent-color:var(--accent)}#warnings{font-size:14px;color:var(--warn);padding-left:22px;margin:12px 0 0}#warnings:empty{display:none}#downloadBox{margin:18px 0 0}.notes{color:var(--muted);font-size:14px;margin-top:24px}.notes p{margin:8px 0}code{font-size:.94em}noscript p{color:var(--error)}[hidden]{display:none!important}@media(max-width:480px){main{margin:24px auto;padding:0 12px 24px}.card{padding:18px}#drop{padding:22px 14px}.actions button{flex:1}.tolerance{display:block}.tolerance input{display:block;width:100%;margin-top:6px}}@media(prefers-color-scheme:dark){:root{--bg:#111821;--card:#1b2532;--text:#eef3fa;--muted:#adbed2;--line:#42546b;--accent:#2668ac;--soft:#162230;--error:#ed8797;--good:#62c49a;--warn:#f0bf75;--focus:#8dc1ff}.eyebrow{color:#91c5ff}}
 .settings{margin-top:24px;border-top:1px solid var(--line);padding-top:18px}.settings summary{cursor:pointer;font-weight:650;color:var(--accent);padding:8px 0}.settings summary::marker{color:var(--muted)}.settings .options{padding-top:14px}.settings-note{margin:4px 0 12px}.option{padding:10px 0;border-top:1px solid var(--line)}.return-action{color:var(--accent);display:inline-block;padding:10px 0;font-weight:600}input:disabled{opacity:.55}.settings[open] summary{margin-bottom:8px}
 </style>
-<script src="app.js?v=20261110-ui2" defer></script>
+<script src="app.js?v=20261110-preview1" defer></script>
+<link rel="stylesheet" href="workspace.css?v=20261110-preview1">
+<script src="preview.js?v=20261110-preview1" defer></script>
 </head>
 <body>
 <main>
 <div class="eyebrow">Công cụ chuyển đổi CAD</div>
 <h1>Chuyển STL → STEP</h1>
 <p class="sub">Xử lý ngay trên máy bạn. Nội dung file không được tải lên máy chủ.</p>
+<div class="workspace">
 <section class="card" aria-label="Chuyển đổi file STL">
 <noscript><p>Cần bật JavaScript để sử dụng công cụ.</p></noscript>
 <div id="drop" aria-label="Vùng thả file STL">
@@ -29,14 +32,6 @@
 </div>
 
 <div class="actions"><button id="go" class="primary" type="button" disabled>Chuyển sang STEP</button><button id="cancel" class="secondary" type="button" hidden>Hủy tác vụ</button></div>
-<div id="statusBox" data-tone="neutral" aria-busy="false">
-<progress id="progress" aria-label="Đang chuyển đổi" hidden></progress>
-<p id="elapsed" class="hint" hidden></p>
-<p id="runningHelp" class="hint" hidden>Lần đầu có thể mất thêm thời gian để tải bộ chuyển đổi khoảng 63 MiB. Bạn có thể hủy tác vụ; giới hạn xử lý là 3 phút.</p>
-<p id="log" role="status" aria-live="polite" aria-atomic="true">Chọn file STL để bắt đầu.</p>
-<ul id="warnings" aria-label="Lưu ý về kết quả"></ul>
-</div>
-<div id="downloadBox" hidden><a id="dl" class="download">Tải file STEP</a></div>
 <details id="settings" class="settings" open>
 <summary>Tùy chọn chuyển đổi</summary>
 <p class="hint settings-note">Có thể giữ thiết lập mặc định để bắt đầu. Sửa cạnh chạm có thay đổi hình học cục bộ; tắt nếu cần giữ nguyên STL. Vá lỗ luôn cần bạn chủ động bật.</p>
@@ -59,6 +54,22 @@
 <a class="return-action" href="#go">↑ Quay lại nút chuyển đổi</a>
 </details>
 </section>
+<section class="viewer" aria-label="Xem mô hình STL nguồn">
+<div class="viewer-head"><div><strong>Mô hình 3D</strong><span class="source-badge">STL nguồn</span></div><button id="fitView" class="secondary" type="button">Về giữa</button></div>
+<div class="viewport"><canvas id="modelCanvas" tabindex="0" aria-label="Mô hình STL: kéo để xoay, Shift kéo để di chuyển, cuộn để zoom; phím mũi tên xoay, cộng trừ zoom, F căn giữa"></canvas><p id="previewMessage">Chọn hoặc kéo file STL vào bảng bên trái để xem mô hình.</p></div>
+<div class="view-tools"><label>Góc nhìn <select id="cameraView"><option value="iso">Isometric</option><option value="front">Trước</option><option value="top">Trên</option><option value="right">Phải</option></select></label><label>Hiển thị <select id="renderMode"><option value="solid">Solid</option><option value="wire">Wireframe</option><option value="both">Solid + wireframe</option></select></label></div>
+<p id="modelInfo">Chưa có mô hình</p><p class="hint viewer-help">Kéo để xoay · Shift/kéo phải để pan · Cuộn hoặc chụm để zoom<br>1 đơn vị STL = 1 mm. Preview nguồn không phải kết quả STEP.</p>
+</section>
+<aside class="result-panel" aria-label="Kết quả chuyển đổi"><h2>Kiểm tra &amp; kết quả</h2><div id="statusBox" data-tone="neutral" aria-busy="false">
+<progress id="progress" aria-label="Đang chuyển đổi" hidden></progress>
+<p id="elapsed" class="hint" hidden></p>
+<p id="runningHelp" class="hint" hidden>Lần đầu có thể mất thêm thời gian để tải bộ chuyển đổi khoảng 63 MiB. Bạn có thể hủy tác vụ; giới hạn xử lý là 3 phút.</p>
+<p id="log" role="status" aria-live="polite" aria-atomic="true">Chọn file STL để bắt đầu.</p>
+<ul id="warnings" aria-label="Lưu ý về kết quả"></ul>
+</div>
+<div id="downloadBox" hidden><a id="dl" class="download">Tải file STEP</a></div>
+<p class="hint">Kết quả được cập nhật sau chuyển đổi. Công cụ không khôi phục cây feature hoặc lịch sử thiết kế.</p></aside></div>
+
 <div class="notes">
 <h2>Hiểu đúng kết quả</h2>
 <p>STL không lưu đơn vị. Công cụ hiểu 1 đơn vị STL = 1 mm; hãy kiểm tra kích thước trong CAD sau khi mở STEP.</p>
