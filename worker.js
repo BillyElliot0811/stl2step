@@ -116,7 +116,26 @@ onmessage = async ({data:job}) => {
       return {min,max};
     }
     let result, faces, allSolid, solids = 0, openShells = 0, reconstruction = null;
-    if (recovered && recovered.ok) {
+    if(job.recoverCurves && topologySafe){
+      let candidate=null;
+      try{
+        importScripts('strip-curves.js?v=20261109-sliver1','annulus-browser.js?v=20261115-annulus1');
+        candidate=AnnulusExperimental.recognize(parsed.triangles,job.curveTolerance);
+      }catch(error){
+        if(typeof error==='number'||error instanceof WebAssembly.RuntimeError)throw error;
+        // Optional recognition or module loading failure retains existing conversion.
+      }
+      if(candidate){
+        try{
+          const shape=keep(AnnulusExperimental.build(oc,candidate));
+          const stats=AnnulusExperimental.build.inspect(oc,shape);
+          result=shape;faces=stats.faces;solids=stats.solids;allSolid=true;
+          reconstruction={type:'experimental-annular-step',support:candidate.support,stats};parsed.triangles.length=0;
+          for(let i=warnings.length-1;i>=0;i--)if(warnings[i]===curveIssueWarning)warnings.splice(i,1);
+        }catch(error){if(typeof error==='number'||error instanceof WebAssembly.RuntimeError)throw error;warnings.push('Experimental annulus build failed; using existing conversion.');}
+      }
+    }
+    if (!result && recovered && recovered.ok) {
       say('Đang dựng mặt trụ, cung tròn và fillet giải tích…');
       importScripts('analytic-builder.js?v=20261109-sliver1');
       try {
