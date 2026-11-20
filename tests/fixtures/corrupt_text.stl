@@ -1,0 +1,4 @@
+Tài liệu văn bản thuần không phải dữ liệu mô hình 3D STL.
+Chuyển STL sang STEP - Kiểm tra phản hồi khi gặp file hỏng.
+Tập tin này thiếu cấu trúc solid, facet normal, outer loop và vertex.
+Dòng kết thúc thử nghiệm xử lý an toàn và không gây treo giao diện.
