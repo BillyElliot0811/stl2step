@@ -106,3 +106,5 @@ Chesam: từ 145 xuống 123 mặt, loại 22 mặt nhỏ quanh chỗ chữ ch�
 Triển khai cần đồng thời cập nhật `junction-curves.js`, `strip-curves.js`, `worker.js`, `app.js`, `index.html`.
 
 Bản 20261109-sliver1 gộp thêm mặt phẳng nhỏ gần đồng phẳng ở đầu chữ C bằng kiểm tra mặt kề, sai lệch và khối kín. Đối chiếu cục bộ hai chiều với bản 125 mặt tại hơn 10.000 điểm cho sai lệch lớn nhất 0,00000269 mm; đây là kiểm tra lấy mẫu, không phải chứng minh sai lệch toàn mô hình. Mẫu nắp nam châm vẫn 25 mặt.
+
+
