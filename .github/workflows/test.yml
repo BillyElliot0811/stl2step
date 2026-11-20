@@ -1,0 +1,50 @@
+name: Kiểm thử tự động E2E
+
+on:
+  push:
+    branches: [ main, them-bo-kiem-thu, '**' ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    name: Chạy Playwright E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Kiểm tra mã nguồn
+        uses: actions/checkout@v4
+
+      - name: Thiết lập Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Thiết lập Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cài đặt thư viện Node
+        run: npm ci
+
+      - name: Sinh fixtures STL
+        run: node tests/make-fixtures.js
+
+      - name: Cài đặt Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Chạy kiểm thử Playwright
+        run: npx playwright test
+
+      - name: Tải báo cáo kiểm thử khi có lỗi
+        uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() && failure() }}
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 14
