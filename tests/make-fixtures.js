@@ -73,8 +73,8 @@ function makeCube() {
   return makeBoxFaces(0, 0, 0, 10, 10, 10);
 }
 
-// 2. cylinder.stl (hình trụ kín, 64 tam giác)
-function makeCylinder(r = 5, h = 10, n = 16) {
+// 2. cylinder.stl (hình trụ kín, 48 đoạn)
+function makeCylinder(r = 5, h = 10, n = 48) {
   const triangles = [];
   // Đáy dưới (z=0, normal -z)
   for (let i = 0; i < n; i++) {
@@ -152,7 +152,7 @@ function makeCorruptText() {
 
 const files = {
   'cube.stl': toAsciiStl('cube', makeCube()),
-  'cylinder.stl': toAsciiStl('cylinder', makeCylinder(5, 10, 16)),
+  'cylinder.stl': toAsciiStl('cylinder', makeCylinder(5, 10, 48)),
   'planar_hole.stl': toAsciiStl('planar_hole', makePlanarHole()),
   'edge_contact.stl': toAsciiStl('edge_contact', makeEdgeContact()),
   'open_mesh.stl': toAsciiStl('open_mesh', makeOpenMesh()),

@@ -27,25 +27,30 @@ async function uploadAndConvert(page, filename) {
 
 /**
  * Helper chờ hoàn tất chuyển đổi (hoặc link download hoặc trạng thái lỗi xuất hiện)
+ * Dùng waitForFunction để kiểm tra trực tiếp DOM state, tránh pending promise rò rỉ.
  * @param {import('@playwright/test').Page} page
  * @param {number} timeout
  */
 async function waitForConversionFinish(page, timeout = 120000) {
-  // Chờ một trong các điều kiện kết thúc: link download hiện, errorBox hiện, hoặc statusBox báo lỗi
-  await Promise.race([
-    page.locator('#downloadBox:not([hidden]) #dl').waitFor({ state: 'visible', timeout }),
-    page.locator('#errorBox:not([hidden])').waitFor({ state: 'visible', timeout }).catch(() => {}),
-    page.locator('#statusBox[data-tone="error"]').waitFor({ state: 'visible', timeout }).catch(() => {}),
-  ]);
+  await page.waitForFunction(() => {
+    const downloadBox = document.getElementById('downloadBox');
+    const dl = document.getElementById('dl');
+    const statusBox = document.getElementById('statusBox');
+    const errorBox = document.getElementById('errorBox');
+
+    // Đã xong nếu downloadBox hiển thị link tải STEP
+    if (downloadBox && !downloadBox.hidden && dl && dl.getAttribute('href')) return 'done';
+    // Hoặc trạng thái báo lỗi (statusBox màu đỏ hoặc errorBox hiển thị)
+    if (statusBox && statusBox.dataset.tone === 'error') return 'error';
+    if (errorBox && !errorBox.hidden) return 'error';
+    return false;
+  }, null, { timeout });
 }
 
 test.describe('Bộ kiểm thử E2E web stl2step', () => {
-  // Cấu hình chạy tuần tự để tiết kiệm tài nguyên khi chạy WebAssembly
-  test.describe.configure({ mode: 'serial' });
-
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
-    await expect(page.locator('#drop')).toBeVisible();
+    await expect(page.locator('#drop')).toBeVisible({ timeout: 15000 });
   });
 
   // Ca 1: cube.stl (File hợp lệ tiêu chuẩn - 12 tam giác)
@@ -64,13 +69,16 @@ test.describe('Bộ kiểm thử E2E web stl2step', () => {
     const downloadAttr = await dlLink.getAttribute('download');
     expect(downloadAttr).toMatch(/\.step$/i);
 
-    // 2. Kiểm tra thanh tiến trình đạt 100%
-    const progress = page.locator('#progress');
-    const progressPercent = page.locator('#progressPercent');
-    const isProgress100 = await progress.evaluate(el => el.value === 100 || el.getAttribute('value') === '100').catch(() => false);
-    const percentText = await progressPercent.textContent().catch(() => '');
+    // 2. Kiểm tra thanh tiến trình đạt 100% theo yêu cầu dự án
+    const isProgress100 = await page.evaluate(() => {
+      const p = /** @type {HTMLProgressElement|null} */ (document.getElementById('progress'));
+      const pct = document.getElementById('progressPercent');
+      if (pct && pct.textContent && pct.textContent.includes('100%')) return true;
+      if (p && (p.value === 100 || p.getAttribute('value') === '100')) return true;
+      return false;
+    });
     expect(
-      isProgress100 || percentText.includes('100%'),
+      isProgress100,
       'Thanh tiến trình phải đạt 100% sau khi chuyển đổi hoàn tất'
     ).toBe(true);
 
@@ -82,7 +90,7 @@ test.describe('Bộ kiểm thử E2E web stl2step', () => {
 
     // 4. Kiểm tra cấu trúc nội dung file STEP tải về
     const stepContent = await page.evaluate(async () => {
-      const a = document.getElementById('dl');
+      const a = /** @type {HTMLAnchorElement|null} */ (document.getElementById('dl'));
       if (!a || !a.href) return null;
       const res = await fetch(a.href);
       return await res.text();
@@ -91,8 +99,8 @@ test.describe('Bộ kiểm thử E2E web stl2step', () => {
     expect(stepContent).toContain('ISO-10303-21');
   });
 
-  // Ca 2: cylinder.stl (Hình trụ kín - kiểm tra mặt trụ/mặt cong)
-  test('Ca 2: cylinder.stl (hình trụ) - chuyển đổi thành solid kín hợp lệ', async ({ page }, testInfo) => {
+  // Ca 2: cylinder.stl (Hình trụ kín 48 đoạn - kiểm tra mặt trụ/mặt cong)
+  test('Ca 2: cylinder.stl (trụ 48 đoạn) - chuyển đổi thành solid kín hợp lệ', async ({ page }, testInfo) => {
     const start = performance.now();
 
     await uploadAndConvert(page, 'cylinder.stl');
@@ -108,12 +116,15 @@ test.describe('Bộ kiểm thử E2E web stl2step', () => {
     expect(downloadAttr).toMatch(/\.step$/i);
 
     // 2. Thanh tiến trình đạt 100%
-    const progress = page.locator('#progress');
-    const progressPercent = page.locator('#progressPercent');
-    const isProgress100 = await progress.evaluate(el => el.value === 100 || el.getAttribute('value') === '100').catch(() => false);
-    const percentText = await progressPercent.textContent().catch(() => '');
+    const isProgress100 = await page.evaluate(() => {
+      const p = /** @type {HTMLProgressElement|null} */ (document.getElementById('progress'));
+      const pct = document.getElementById('progressPercent');
+      if (pct && pct.textContent && pct.textContent.includes('100%')) return true;
+      if (p && (p.value === 100 || p.getAttribute('value') === '100')) return true;
+      return false;
+    });
     expect(
-      isProgress100 || percentText.includes('100%'),
+      isProgress100,
       'Thanh tiến trình phải đạt 100% sau khi chuyển đổi hoàn tất'
     ).toBe(true);
 
@@ -148,12 +159,15 @@ test.describe('Bộ kiểm thử E2E web stl2step', () => {
     await expect(dlLink).toBeVisible();
 
     // 2. Thanh tiến trình đạt 100%
-    const progress = page.locator('#progress');
-    const progressPercent = page.locator('#progressPercent');
-    const isProgress100 = await progress.evaluate(el => el.value === 100 || el.getAttribute('value') === '100').catch(() => false);
-    const percentText = await progressPercent.textContent().catch(() => '');
+    const isProgress100 = await page.evaluate(() => {
+      const p = /** @type {HTMLProgressElement|null} */ (document.getElementById('progress'));
+      const pct = document.getElementById('progressPercent');
+      if (pct && pct.textContent && pct.textContent.includes('100%')) return true;
+      if (p && (p.value === 100 || p.getAttribute('value') === '100')) return true;
+      return false;
+    });
     expect(
-      isProgress100 || percentText.includes('100%'),
+      isProgress100,
       'Thanh tiến trình phải đạt 100% sau khi chuyển đổi hoàn tất'
     ).toBe(true);
 
@@ -180,12 +194,15 @@ test.describe('Bộ kiểm thử E2E web stl2step', () => {
     await expect(dlLink).toBeVisible();
 
     // 2. Thanh tiến trình đạt 100%
-    const progress = page.locator('#progress');
-    const progressPercent = page.locator('#progressPercent');
-    const isProgress100 = await progress.evaluate(el => el.value === 100 || el.getAttribute('value') === '100').catch(() => false);
-    const percentText = await progressPercent.textContent().catch(() => '');
+    const isProgress100 = await page.evaluate(() => {
+      const p = /** @type {HTMLProgressElement|null} */ (document.getElementById('progress'));
+      const pct = document.getElementById('progressPercent');
+      if (pct && pct.textContent && pct.textContent.includes('100%')) return true;
+      if (p && (p.value === 100 || p.getAttribute('value') === '100')) return true;
+      return false;
+    });
     expect(
-      isProgress100 || percentText.includes('100%'),
+      isProgress100,
       'Thanh tiến trình phải đạt 100% sau khi chuyển đổi hoàn tất'
     ).toBe(true);
 
@@ -193,7 +210,6 @@ test.describe('Bộ kiểm thử E2E web stl2step', () => {
     const logText = await page.locator('#log').textContent();
     expect(logText).toMatch(/khối kín \(solid\)/i);
     expect(logText).toMatch(/sửa \d+ cạnh chạm/i);
-    // Ngưỡng thể tích thay đổi cho sửa cạnh chạm là <= 0.01%
     const statusBox = page.locator('#statusBox');
     await expect(statusBox).toHaveAttribute('data-tone', 'success');
   });
@@ -235,14 +251,14 @@ test.describe('Bộ kiểm thử E2E web stl2step', () => {
 
     await uploadAndConvert(page, 'corrupt_text.stl');
     // Chờ xử lý lỗi
-    await page.locator('#errorBox, #statusBox[data-tone="error"]').waitFor({ timeout: 15000 });
+    await waitForConversionFinish(page, 15000);
 
     const elapsed = ((performance.now() - start) / 1000).toFixed(2);
     console.log(`⏱️ Thời gian ca [${testInfo.title}]: ${elapsed}s`);
 
     // 1. Kiểm tra tab không bị treo: giao diện vẫn tương tác bình thường
     await expect(page.locator('body')).toBeVisible();
-    await expect(page.locator('#choose')).toBeEnabled();
+    await expect(page.locator('#choose')).toBeEnabled({ timeout: 5000 });
 
     // 2. Kiểm tra hộp #errorBox hiển thị theo spec
     const errorBox = page.locator('#errorBox');
