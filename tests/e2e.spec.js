@@ -300,11 +300,20 @@ test.describe('Bộ kiểm thử E2E web stl2step', () => {
       'Thanh tiến trình phải đạt 100% sau khi chuyển đổi hoàn tất'
     ).toBe(true);
 
-    // 3. Kiểm tra báo cáo sửa cạnh chạm, solid kín và thể tích đổi trong ngưỡng
+    // 3. Kiểm tra báo cáo sửa cạnh chạm, solid kín và thể tích đổi trong ngưỡng chuẩn của dự án (<= 0.01%)
     const logText = await page.locator('#log').textContent();
     expect(logText).toMatch(/khối kín \(solid\)/i);
     expect(logText).toMatch(/sửa \d+ cạnh chạm/i);
-    expect(logText).toMatch(/thể tích đổi/i);
+    
+    // Trích xuất % thay đổi thể tích từ thông báo: ví dụ "thể tích đổi -0,00000561%."
+    const volMatch = logText?.match(/thể tích đổi\s+([-\d,\.]+)%/i);
+    expect(volMatch, 'Báo cáo phải ghi nhận mức thay đổi thể tích sau khi sửa cạnh chạm').toBeTruthy();
+    const volChangePercent = Math.abs(parseFloat((volMatch?.[1] || '0').replace(',', '.')));
+    // Ngưỡng của dự án trong HUONG-DAN.md và contact-kernel.js là 0.01% (|ΔV/V| <= 0.0001)
+    expect(
+      volChangePercent,
+      `Độ thay đổi thể tích (${volChangePercent}%) phải nằm trong ngưỡng dự án <= 0.01% (|ΔV/V| <= 0.0001)`
+    ).toBeLessThanOrEqual(0.01);
     const statusBox = page.locator('#statusBox');
     await expect(statusBox).toHaveAttribute('data-tone', 'success');
 
