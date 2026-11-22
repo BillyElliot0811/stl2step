@@ -128,19 +128,45 @@ function makePlanarHole() {
   return base.concat(topFaces);
 }
 
-// 4. edge_contact.stl (2 khối hộp tiếp xúc tại cạnh x=0, y=0, z in [0, 10] bề dày 0)
-function makeEdgeContact() {
+// 4. disjoint_edge_contact.stl (2 khối hộp tiếp xúc tại cạnh x=0, y=0, z in [0, 10] bề dày 0 - 2 Shells riêng biệt)
+function makeDisjointEdgeContact() {
   const c1 = makeBoxFaces(-10, 0, 0, 0, 10, 10);
   const c2 = makeBoxFaces(0, -10, 0, 10, 0, 10);
   return c1.concat(c2);
 }
 
-// 5. open_mesh.stl (khối hộp hở mặt trên z=10, đường kính hở ~14 mm > 10 mm)
+// 5. edge_contact_single_body.stl (1 vật thể liền khối, 1 Shell, có chỗ chạm cạnh bề dày 0)
+function makeEdgeContactSingleBody() {
+  const cells = [
+    [-10, 0, 0, 10],       // Tip 1
+    [-20, -10, 0, 10],     // Bridge 1
+    [-20, -10, -10, 0],    // Bridge 2
+    [-20, -10, -20, -10],  // Bridge 3
+    [-10, 0, -20, -10],    // Bridge 4
+    [0, 10, -20, -10],     // Bridge 5
+    [0, 10, -10, 0],       // Tip 2
+  ];
+  let all = [];
+  for (const [x0, x1, y0, y1] of cells) {
+    all.push(...makeBoxFaces(x0, y0, 0, x1, y1, 10));
+  }
+  const faceCount = new Map();
+  for (const t of all) {
+    const k = t.map(p => p.join(',')).sort().join(';');
+    faceCount.set(k, (faceCount.get(k) || 0) + 1);
+  }
+  return all.filter(t => {
+    const k = t.map(p => p.join(',')).sort().join(';');
+    return faceCount.get(k) === 1;
+  });
+}
+
+// 6. open_mesh.stl (khối hộp hở mặt trên z=10, đường kính hở ~14 mm > 10 mm)
 function makeOpenMesh() {
   return makeBoxFaces(0, 0, 0, 10, 10, 10, true);
 }
 
-// 6. corrupt_text.stl (file văn bản đổi đuôi .stl)
+// 7. corrupt_text.stl (file văn bản đổi đuôi .stl)
 function makeCorruptText() {
   return [
     'Tài liệu văn bản thuần không phải dữ liệu mô hình 3D STL.',
@@ -154,7 +180,8 @@ const files = {
   'cube.stl': toAsciiStl('cube', makeCube()),
   'cylinder.stl': toAsciiStl('cylinder', makeCylinder(5, 10, 48)),
   'planar_hole.stl': toAsciiStl('planar_hole', makePlanarHole()),
-  'edge_contact.stl': toAsciiStl('edge_contact', makeEdgeContact()),
+  'disjoint_edge_contact.stl': toAsciiStl('disjoint_edge_contact', makeDisjointEdgeContact()),
+  'edge_contact_single_body.stl': toAsciiStl('edge_contact_single_body', makeEdgeContactSingleBody()),
   'open_mesh.stl': toAsciiStl('open_mesh', makeOpenMesh()),
   'corrupt_text.stl': makeCorruptText(),
 };

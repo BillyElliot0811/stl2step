@@ -179,39 +179,37 @@ test.describe('Bộ kiểm thử E2E web stl2step', () => {
     await expect(statusBox).toHaveAttribute('data-tone', 'success');
   });
 
-  // Ca 4: edge_contact.stl (Cạnh tiếp xúc bề dày 0 - kiểm tra sửa cạnh chạm)
-  test('Ca 4: edge_contact.stl (cạnh tiếp xúc bề dày 0) - sửa cạnh chạm và tạo solid kín', async ({ page }, testInfo) => {
+  // Ca 4: disjoint_edge_contact.stl (Hai khối lập phương rời chỉ chạm ở một cạnh - hành vi thận trọng đúng thiết kế)
+  test('Ca 4: disjoint_edge_contact.stl (hai khối rời chạm cạnh) - hành vi thận trọng giữ mặt/vỏ và có cảnh báo', async ({ page }, testInfo) => {
     const start = performance.now();
 
-    await uploadAndConvert(page, 'edge_contact.stl');
+    await uploadAndConvert(page, 'disjoint_edge_contact.stl');
     await waitForConversionFinish(page);
 
     const elapsed = ((performance.now() - start) / 1000).toFixed(2);
     console.log(`⏱️ Thời gian ca [${testInfo.title}]: ${elapsed}s`);
 
-    // 1. Tải được link .step
+    // 1. Kiểm tra tab không bị treo, giao diện vẫn tương tác bình thường
+    await expect(page.locator('body')).toBeVisible();
+    await expect(page.locator('#choose')).toBeEnabled({ timeout: 5000 });
+
+    // 2. Vẫn xuất được STEP dạng mặt/vỏ
     const dlLink = page.locator('#dl');
     await expect(dlLink).toBeVisible();
 
-    // 2. Thanh tiến trình đạt 100%
-    const isProgress100 = await page.evaluate(() => {
-      const p = /** @type {HTMLProgressElement|null} */ (document.getElementById('progress'));
-      const pct = document.getElementById('progressPercent');
-      if (pct && pct.textContent && pct.textContent.includes('100%')) return true;
-      if (p && (p.value === 100 || p.getAttribute('value') === '100')) return true;
-      return false;
-    });
-    expect(
-      isProgress100,
-      'Thanh tiến trình phải đạt 100% sau khi chuyển đổi hoàn tất'
-    ).toBe(true);
-
-    // 3. Kiểm tra báo cáo sửa cạnh chạm, solid kín và thể tích đổi trong ngưỡng
+    // 3. Giữ mặt/vỏ vì gồm 2 Shells riêng biệt, web từ chối tạo khối sai để bảo vệ an toàn hình học
     const logText = await page.locator('#log').textContent();
-    expect(logText).toMatch(/khối kín \(solid\)/i);
-    expect(logText).toMatch(/sửa \d+ cạnh chạm/i);
+    expect(logText).toMatch(/mặt\/vỏ chưa tạo thành khối kín/i);
     const statusBox = page.locator('#statusBox');
-    await expect(statusBox).toHaveAttribute('data-tone', 'success');
+    await expect(statusBox).toHaveAttribute('data-tone', 'warning');
+
+    // 4. Có thông báo cảnh báo rõ ràng về cạnh bất thường hoặc cạnh dùng chung non-manifold
+    const warnings = page.locator('#warnings li');
+    const allWarnings = await warnings.allTextContents();
+    const hasWarning = allWarnings.some(w =>
+      /cạnh bất thường|non-manifold|mặt\/vỏ|chưa tạo thành khối/i.test(w)
+    );
+    expect(hasWarning || /cạnh bất thường/i.test(logText || ''), 'Phải có thông báo cảnh báo rõ ràng').toBe(true);
   });
 
   // Ca 5: open_mesh.stl (Lưới hở - giữ shell và có cảnh báo)
@@ -271,5 +269,53 @@ test.describe('Bộ kiểm thử E2E web stl2step', () => {
       /gợi ý|khắc phục|hãy|vui lòng|kiểm tra|không phải stl/i.test(errorText || ''),
       'Thông báo lỗi phải có gợi ý tiếng Việt'
     ).toBe(true);
+  });
+
+  // Ca 7: edge_contact_single_body.stl (Một vật thể liền khối có cạnh tiếp xúc 0 - sửa cạnh chạm thành solid kín)
+  test('Ca 7: edge_contact_single_body.stl (vật thể liền khối có cạnh tiếp xúc 0) - sửa cạnh chạm và tạo solid kín', async ({ page }, testInfo) => {
+    const start = performance.now();
+
+    await uploadAndConvert(page, 'edge_contact_single_body.stl');
+    await waitForConversionFinish(page);
+
+    const elapsed = ((performance.now() - start) / 1000).toFixed(2);
+    console.log(`⏱️ Thời gian ca [${testInfo.title}]: ${elapsed}s`);
+
+    // 1. Tải được link .step
+    const dlLink = page.locator('#dl');
+    await expect(dlLink).toBeVisible();
+    const downloadAttr = await dlLink.getAttribute('download');
+    expect(downloadAttr).toMatch(/\.step$/i);
+
+    // 2. Thanh tiến trình đạt 100%
+    const isProgress100 = await page.evaluate(() => {
+      const p = /** @type {HTMLProgressElement|null} */ (document.getElementById('progress'));
+      const pct = document.getElementById('progressPercent');
+      if (pct && pct.textContent && pct.textContent.includes('100%')) return true;
+      if (p && (p.value === 100 || p.getAttribute('value') === '100')) return true;
+      return false;
+    });
+    expect(
+      isProgress100,
+      'Thanh tiến trình phải đạt 100% sau khi chuyển đổi hoàn tất'
+    ).toBe(true);
+
+    // 3. Kiểm tra báo cáo sửa cạnh chạm, solid kín và thể tích đổi trong ngưỡng
+    const logText = await page.locator('#log').textContent();
+    expect(logText).toMatch(/khối kín \(solid\)/i);
+    expect(logText).toMatch(/sửa \d+ cạnh chạm/i);
+    expect(logText).toMatch(/thể tích đổi/i);
+    const statusBox = page.locator('#statusBox');
+    await expect(statusBox).toHaveAttribute('data-tone', 'success');
+
+    // 4. Kiểm tra cấu trúc STEP hợp lệ
+    const stepContent = await page.evaluate(async () => {
+      const a = /** @type {HTMLAnchorElement|null} */ (document.getElementById('dl'));
+      if (!a || !a.href) return null;
+      const res = await fetch(a.href);
+      return await res.text();
+    });
+    expect(stepContent).toBeTruthy();
+    expect(stepContent).toContain('ISO-10303-21');
   });
 });
