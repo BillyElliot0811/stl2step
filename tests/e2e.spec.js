@@ -1,0 +1,330 @@
+// @ts-check
+const { test, expect } = require('@playwright/test');
+const path = require('path');
+const fs = require('fs');
+
+const FIXTURES_DIR = path.resolve(__dirname, 'fixtures');
+
+/**
+ * Helper nạp file vào input #file và bấm Chuyển sang STEP
+ * @param {import('@playwright/test').Page} page
+ * @param {string} filename
+ */
+async function uploadAndConvert(page, filename) {
+  const filePath = path.join(FIXTURES_DIR, filename);
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`Fixture file not found: ${filePath}`);
+  }
+
+  // Nạp file qua setInputFiles
+  await page.setInputFiles('#file', filePath);
+
+  // Đảm bảo nút Chuyển sang STEP được bật trước khi bấm
+  const goBtn = page.locator('#go');
+  await expect(goBtn).toBeEnabled({ timeout: 10000 });
+  await goBtn.click();
+}
+
+/**
+ * Helper chờ hoàn tất chuyển đổi (hoặc link download hoặc trạng thái lỗi xuất hiện)
+ * Dùng waitForFunction để kiểm tra trực tiếp DOM state, tránh pending promise rò rỉ.
+ * @param {import('@playwright/test').Page} page
+ * @param {number} timeout
+ */
+async function waitForConversionFinish(page, timeout = 120000) {
+  await page.waitForFunction(() => {
+    const downloadBox = document.getElementById('downloadBox');
+    const dl = document.getElementById('dl');
+    const statusBox = document.getElementById('statusBox');
+    const errorBox = document.getElementById('errorBox');
+
+    // Đã xong nếu downloadBox hiển thị link tải STEP
+    if (downloadBox && !downloadBox.hidden && dl && dl.getAttribute('href')) return 'done';
+    // Hoặc trạng thái báo lỗi (statusBox màu đỏ hoặc errorBox hiển thị)
+    if (statusBox && statusBox.dataset.tone === 'error') return 'error';
+    if (errorBox && !errorBox.hidden) return 'error';
+    return false;
+  }, null, { timeout });
+}
+
+test.describe('Bộ kiểm thử E2E web stl2step', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('#drop')).toBeVisible({ timeout: 15000 });
+  });
+
+  // Ca 1: cube.stl (File hợp lệ tiêu chuẩn - 12 tam giác)
+  test('Ca 1: cube.stl (12 tam giác) - chuyển đổi thành solid kín hợp lệ', async ({ page }, testInfo) => {
+    const start = performance.now();
+
+    await uploadAndConvert(page, 'cube.stl');
+    await waitForConversionFinish(page);
+
+    const elapsed = ((performance.now() - start) / 1000).toFixed(2);
+    console.log(`⏱️ Thời gian ca [${testInfo.title}]: ${elapsed}s`);
+
+    // 1. Kiểm tra link tải .step
+    const dlLink = page.locator('#dl');
+    await expect(dlLink).toBeVisible();
+    const downloadAttr = await dlLink.getAttribute('download');
+    expect(downloadAttr).toMatch(/\.step$/i);
+
+    // 2. Kiểm tra thanh tiến trình đạt 100% theo yêu cầu dự án
+    const isProgress100 = await page.evaluate(() => {
+      const p = /** @type {HTMLProgressElement|null} */ (document.getElementById('progress'));
+      const pct = document.getElementById('progressPercent');
+      if (pct && pct.textContent && pct.textContent.includes('100%')) return true;
+      if (p && (p.value === 100 || p.getAttribute('value') === '100')) return true;
+      return false;
+    });
+    expect(
+      isProgress100,
+      'Thanh tiến trình phải đạt 100% sau khi chuyển đổi hoàn tất'
+    ).toBe(true);
+
+    // 3. Kiểm tra báo cáo mesh-qa đạt các ngưỡng dự án (solid kín, 1 khối)
+    const logText = await page.locator('#log').textContent();
+    expect(logText).toMatch(/khối kín \(solid\)/i);
+    const statusBox = page.locator('#statusBox');
+    await expect(statusBox).toHaveAttribute('data-tone', 'success');
+
+    // 4. Kiểm tra cấu trúc nội dung file STEP tải về
+    const stepContent = await page.evaluate(async () => {
+      const a = /** @type {HTMLAnchorElement|null} */ (document.getElementById('dl'));
+      if (!a || !a.href) return null;
+      const res = await fetch(a.href);
+      return await res.text();
+    });
+    expect(stepContent).toBeTruthy();
+    expect(stepContent).toContain('ISO-10303-21');
+  });
+
+  // Ca 2: cylinder.stl (Hình trụ kín 48 đoạn - kiểm tra mặt trụ/mặt cong)
+  test('Ca 2: cylinder.stl (trụ 48 đoạn) - chuyển đổi thành solid kín hợp lệ', async ({ page }, testInfo) => {
+    const start = performance.now();
+
+    await uploadAndConvert(page, 'cylinder.stl');
+    await waitForConversionFinish(page);
+
+    const elapsed = ((performance.now() - start) / 1000).toFixed(2);
+    console.log(`⏱️ Thời gian ca [${testInfo.title}]: ${elapsed}s`);
+
+    // 1. Tải được link .step
+    const dlLink = page.locator('#dl');
+    await expect(dlLink).toBeVisible();
+    const downloadAttr = await dlLink.getAttribute('download');
+    expect(downloadAttr).toMatch(/\.step$/i);
+
+    // 2. Thanh tiến trình đạt 100%
+    const isProgress100 = await page.evaluate(() => {
+      const p = /** @type {HTMLProgressElement|null} */ (document.getElementById('progress'));
+      const pct = document.getElementById('progressPercent');
+      if (pct && pct.textContent && pct.textContent.includes('100%')) return true;
+      if (p && (p.value === 100 || p.getAttribute('value') === '100')) return true;
+      return false;
+    });
+    expect(
+      isProgress100,
+      'Thanh tiến trình phải đạt 100% sau khi chuyển đổi hoàn tất'
+    ).toBe(true);
+
+    // 3. Báo cáo mesh-qa: solid kín, dung sai & thể tích trong ngưỡng
+    const logText = await page.locator('#log').textContent();
+    expect(logText).toMatch(/khối kín \(solid\)/i);
+    const statusBox = page.locator('#statusBox');
+    await expect(statusBox).toHaveAttribute('data-tone', 'success');
+  });
+
+  // Ca 3: planar_hole.stl (Khối có lỗ phẳng nhỏ - kiểm tra tính năng vá lỗ)
+  test('Ca 3: planar_hole.stl (khối có lỗ phẳng nhỏ) - vá lỗ phẳng thành solid kín', async ({ page }, testInfo) => {
+    const start = performance.now();
+
+    // Bật tùy chọn vá lỗ nhỏ có biên phẳng (#fillHoles)
+    const settings = page.locator('#settings');
+    const isOpen = await settings.getAttribute('open');
+    if (isOpen === null) {
+      await page.locator('#settings summary').click();
+    }
+    const fillHolesCheckbox = page.locator('#fillHoles');
+    await fillHolesCheckbox.check();
+
+    await uploadAndConvert(page, 'planar_hole.stl');
+    await waitForConversionFinish(page);
+
+    const elapsed = ((performance.now() - start) / 1000).toFixed(2);
+    console.log(`⏱️ Thời gian ca [${testInfo.title}]: ${elapsed}s`);
+
+    // 1. Tải được .step
+    const dlLink = page.locator('#dl');
+    await expect(dlLink).toBeVisible();
+
+    // 2. Thanh tiến trình đạt 100%
+    const isProgress100 = await page.evaluate(() => {
+      const p = /** @type {HTMLProgressElement|null} */ (document.getElementById('progress'));
+      const pct = document.getElementById('progressPercent');
+      if (pct && pct.textContent && pct.textContent.includes('100%')) return true;
+      if (p && (p.value === 100 || p.getAttribute('value') === '100')) return true;
+      return false;
+    });
+    expect(
+      isProgress100,
+      'Thanh tiến trình phải đạt 100% sau khi chuyển đổi hoàn tất'
+    ).toBe(true);
+
+    // 3. Khối được vá kín thành solid
+    const logText = await page.locator('#log').textContent();
+    expect(logText).toMatch(/khối kín \(solid\)/i);
+    expect(logText).toMatch(/vá \d+ lỗ/i);
+    const statusBox = page.locator('#statusBox');
+    await expect(statusBox).toHaveAttribute('data-tone', 'success');
+  });
+
+  // Ca 4: disjoint_edge_contact.stl (Hai khối lập phương rời chỉ chạm ở một cạnh - hành vi thận trọng đúng thiết kế)
+  test('Ca 4: disjoint_edge_contact.stl (hai khối rời chạm cạnh) - hành vi thận trọng giữ mặt/vỏ và có cảnh báo', async ({ page }, testInfo) => {
+    const start = performance.now();
+
+    await uploadAndConvert(page, 'disjoint_edge_contact.stl');
+    await waitForConversionFinish(page);
+
+    const elapsed = ((performance.now() - start) / 1000).toFixed(2);
+    console.log(`⏱️ Thời gian ca [${testInfo.title}]: ${elapsed}s`);
+
+    // 1. Kiểm tra tab không bị treo, giao diện vẫn tương tác bình thường
+    await expect(page.locator('body')).toBeVisible();
+    await expect(page.locator('#choose')).toBeEnabled({ timeout: 5000 });
+
+    // 2. Vẫn xuất được STEP dạng mặt/vỏ
+    const dlLink = page.locator('#dl');
+    await expect(dlLink).toBeVisible();
+
+    // 3. Giữ mặt/vỏ vì gồm 2 Shells riêng biệt, web từ chối tạo khối sai để bảo vệ an toàn hình học
+    const logText = await page.locator('#log').textContent();
+    expect(logText).toMatch(/mặt\/vỏ chưa tạo thành khối kín/i);
+    const statusBox = page.locator('#statusBox');
+    await expect(statusBox).toHaveAttribute('data-tone', 'warning');
+
+    // 4. Có thông báo cảnh báo rõ ràng về cạnh bất thường hoặc cạnh dùng chung non-manifold
+    const warnings = page.locator('#warnings li');
+    const allWarnings = await warnings.allTextContents();
+    const hasWarning = allWarnings.some(w =>
+      /cạnh bất thường|non-manifold|mặt\/vỏ|chưa tạo thành khối/i.test(w)
+    );
+    expect(hasWarning || /cạnh bất thường/i.test(logText || ''), 'Phải có thông báo cảnh báo rõ ràng').toBe(true);
+  });
+
+  // Ca 5: open_mesh.stl (Lưới hở - giữ shell và có cảnh báo)
+  test('Ca 5: open_mesh.stl (lưới hở) - giữ dạng shell/vỏ và có cảnh báo', async ({ page }, testInfo) => {
+    const start = performance.now();
+
+    await uploadAndConvert(page, 'open_mesh.stl');
+    await waitForConversionFinish(page);
+
+    const elapsed = ((performance.now() - start) / 1000).toFixed(2);
+    console.log(`⏱️ Thời gian ca [${testInfo.title}]: ${elapsed}s`);
+
+    // 1. Vẫn xuất được STEP dạng mặt/vỏ
+    const dlLink = page.locator('#dl');
+    await expect(dlLink).toBeVisible();
+
+    // 2. Giữ shell (mặt/vỏ chưa tạo thành khối kín)
+    const logText = await page.locator('#log').textContent();
+    expect(logText).toMatch(/mặt\/vỏ chưa tạo thành khối kín/i);
+    const statusBox = page.locator('#statusBox');
+    await expect(statusBox).toHaveAttribute('data-tone', 'warning');
+
+    // 3. Có cảnh báo hiển thị trong danh sách cảnh báo #warnings
+    const warnings = page.locator('#warnings li');
+    const count = await warnings.count();
+    expect(count, 'Phải có ít nhất 1 cảnh báo về lưới hở hoặc cạnh biên').toBeGreaterThanOrEqual(1);
+    const allWarnings = await warnings.allTextContents();
+    const hasBoundaryOrShellWarn = allWarnings.some(w =>
+      /cạnh biên|mặt\/vỏ|chưa tạo thành khối/i.test(w)
+    );
+    expect(hasBoundaryOrShellWarn, 'Cảnh báo phải nhắc đến cạnh biên hở hoặc mặt/vỏ').toBe(true);
+  });
+
+  // Ca 6: corrupt_text.stl (File văn bản đổi đuôi .stl - hộp lỗi tiếng Việt & không treo tab)
+  test('Ca 6: corrupt_text.stl (file hỏng) - hiện #errorBox kèm gợi ý tiếng Việt, tab không bị treo', async ({ page }, testInfo) => {
+    const start = performance.now();
+
+    await uploadAndConvert(page, 'corrupt_text.stl');
+    // Chờ xử lý lỗi
+    await waitForConversionFinish(page, 15000);
+
+    const elapsed = ((performance.now() - start) / 1000).toFixed(2);
+    console.log(`⏱️ Thời gian ca [${testInfo.title}]: ${elapsed}s`);
+
+    // 1. Kiểm tra tab không bị treo: giao diện vẫn tương tác bình thường
+    await expect(page.locator('body')).toBeVisible();
+    await expect(page.locator('#choose')).toBeEnabled({ timeout: 5000 });
+
+    // 2. Kiểm tra hộp #errorBox hiển thị theo spec
+    const errorBox = page.locator('#errorBox');
+    await expect(errorBox, 'Hộp #errorBox chẩn đoán lỗi phải hiển thị khi gặp file hỏng').toBeVisible({ timeout: 5000 });
+
+    // 3. Kiểm tra thông báo kèm gợi ý tiếng Việt
+    const errorText = await errorBox.textContent();
+    expect(errorText).toBeTruthy();
+    expect(
+      /gợi ý|khắc phục|hãy|vui lòng|kiểm tra|không phải stl/i.test(errorText || ''),
+      'Thông báo lỗi phải có gợi ý tiếng Việt'
+    ).toBe(true);
+  });
+
+  // Ca 7: edge_contact_single_body.stl (Một vật thể liền khối có cạnh tiếp xúc 0 - sửa cạnh chạm thành solid kín)
+  test('Ca 7: edge_contact_single_body.stl (vật thể liền khối có cạnh tiếp xúc 0) - sửa cạnh chạm và tạo solid kín', async ({ page }, testInfo) => {
+    const start = performance.now();
+
+    await uploadAndConvert(page, 'edge_contact_single_body.stl');
+    await waitForConversionFinish(page);
+
+    const elapsed = ((performance.now() - start) / 1000).toFixed(2);
+    console.log(`⏱️ Thời gian ca [${testInfo.title}]: ${elapsed}s`);
+
+    // 1. Tải được link .step
+    const dlLink = page.locator('#dl');
+    await expect(dlLink).toBeVisible();
+    const downloadAttr = await dlLink.getAttribute('download');
+    expect(downloadAttr).toMatch(/\.step$/i);
+
+    // 2. Thanh tiến trình đạt 100%
+    const isProgress100 = await page.evaluate(() => {
+      const p = /** @type {HTMLProgressElement|null} */ (document.getElementById('progress'));
+      const pct = document.getElementById('progressPercent');
+      if (pct && pct.textContent && pct.textContent.includes('100%')) return true;
+      if (p && (p.value === 100 || p.getAttribute('value') === '100')) return true;
+      return false;
+    });
+    expect(
+      isProgress100,
+      'Thanh tiến trình phải đạt 100% sau khi chuyển đổi hoàn tất'
+    ).toBe(true);
+
+    // 3. Kiểm tra báo cáo sửa cạnh chạm, solid kín và thể tích đổi trong ngưỡng chuẩn của dự án (<= 0.01%)
+    const logText = await page.locator('#log').textContent();
+    expect(logText).toMatch(/khối kín \(solid\)/i);
+    expect(logText).toMatch(/sửa \d+ cạnh chạm/i);
+    
+    // Trích xuất % thay đổi thể tích từ thông báo: ví dụ "thể tích đổi -0,00000561%."
+    const volMatch = logText?.match(/thể tích đổi\s+([-\d,\.]+)%/i);
+    expect(volMatch, 'Báo cáo phải ghi nhận mức thay đổi thể tích sau khi sửa cạnh chạm').toBeTruthy();
+    const volChangePercent = Math.abs(parseFloat((volMatch?.[1] || '0').replace(',', '.')));
+    // Ngưỡng của dự án trong HUONG-DAN.md và contact-kernel.js là 0.01% (|ΔV/V| <= 0.0001)
+    expect(
+      volChangePercent,
+      `Độ thay đổi thể tích (${volChangePercent}%) phải nằm trong ngưỡng dự án <= 0.01% (|ΔV/V| <= 0.0001)`
+    ).toBeLessThanOrEqual(0.01);
+    const statusBox = page.locator('#statusBox');
+    await expect(statusBox).toHaveAttribute('data-tone', 'success');
+
+    // 4. Kiểm tra cấu trúc STEP hợp lệ
+    const stepContent = await page.evaluate(async () => {
+      const a = /** @type {HTMLAnchorElement|null} */ (document.getElementById('dl'));
+      if (!a || !a.href) return null;
+      const res = await fetch(a.href);
+      return await res.text();
+    });
+    expect(stepContent).toBeTruthy();
+    expect(stepContent).toContain('ISO-10303-21');
+  });
+});
