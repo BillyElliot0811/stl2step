@@ -1,0 +1,53 @@
+name: health-check-pages
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - run: npm ci
+
+      - run: npx playwright install --with-deps chromium
+
+      - id: health
+        continue-on-error: true
+        env:
+          LIVE_URL: https://billyelliot0811.github.io/stl2step/
+        run: npx playwright test tests/health.spec.js --reporter=list
+
+      - name: Gỡ commit mới nhất nếu trang thật hỏng
+        if: steps.health.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          AGE=$(( $(date +%s) - $(git log -1 --format=%ct origin/main) ))
+          if [ "$AGE" -lt 900 ]; then
+            echo "Commit mới hơn 15 phút, có thể Pages chưa triển khai xong. Bỏ qua."
+            exit 0
+          fi
+          git config user.name "auto-heal"
+          git config user.email "auto-heal@users.noreply.github.com"
+          BR=heal/revert-$(date +%s)
+          git switch -c "$BR" origin/main
+          git revert --no-edit HEAD
+          git push -u origin "$BR"
+          URL=$(gh pr create --base main --head "$BR" \
+            --title "Auto-revert: trang thật lỗi" \
+            --body "Health check thất bại sau commit mới nhất. Gỡ commit đó để trang chạy lại.")
+          gh pr merge "$URL" --auto --squash
