@@ -24,3 +24,4 @@ Mỗi mục có: Tiêu chí (đo được) và Phạm vi (chỉ được sửa c
 - **Phạm vi**: `index.html`, `workspace.css`, `app.js`, `tests/`
 
 > **Ghi chú**: “giống meshy” nghĩa là trải nghiệm gọn và rõ trạng thái, không sao chép giao diện hay thương hiệu của họ.
+
