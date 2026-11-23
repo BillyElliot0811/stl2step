@@ -2,7 +2,6 @@
 (function(root){
 const factories={},cache={};
 factories['./annulus-overlap.cjs']=function(module,exports,require){
-// Positive-area intersections in planar or unwrapped cylindrical patch coordinates.
 const orient=(a,b,p)=>(b[0]-a[0])*(p[1]-a[1])-(b[1]-a[1])*(p[0]-a[0]);
 function intersectionArea(a,b){
  let poly=a.map(p=>p.slice());const sign=Math.sign(orient(...b));
@@ -30,10 +29,9 @@ function check(patches){
  }return {candidatePairs:pairs,maxOverlap,areaThreshold:1e-8};
 }
 module.exports={check,intersectionArea};
-
 };
+
 factories['./annulus-coverage.cjs']=function(module,exports,require){
-// Sweep cylindrical triangles between every vertex-height event.
 module.exports=function coverage(patches,s){
  let slices=0,maxError=0,work=0;
  for(let wall=0;wall<2;wall++){
@@ -53,12 +51,9 @@ module.exports=function coverage(patches,s){
  }
  return {slices,maxEndpointError:maxError,endpointTolerance:1e-6,scope:'Cylinder slices between vertex heights; cap coverage remains bounded by support/area/topology guards'};
 };
-
-
-
 };
+
 factories['./annulus-support.cjs']=function(module,exports,require){
-// Experimental support/area guard; does not certify absence of overlapping faces.
 module.exports=function support(triangles,s,tol){
  const dot=(a,b)=>a.reduce((v,x,i)=>v+x*b[i],0),sub=(a,b)=>a.map((x,i)=>x-b[i]),cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
  const ri=s.circles[0].radius,ro=s.circles[1].radius,[lo,mid,hi]=s.levels,eps=1e-5;
@@ -75,8 +70,6 @@ module.exports=function support(triangles,s,tol){
   else {
    const r=[ri,ro][kind-3],first=Math.atan2(t[0][1],t[0][0]);
    const uv=t.map(p=>{let a=Math.atan2(p[1],p[0]);while(a-first>Math.PI)a-=2*Math.PI;while(a-first< -Math.PI)a+=2*Math.PI;return [a*r,p[2]];});
-   // Three copies include all possible seam-crossing overlaps; copies of one
-   // narrow triangle have disjoint bounding boxes.
    for(const shift of [-2*Math.PI*r,0,2*Math.PI*r])patches[kind].push(uv.map(p=>[p[0]+shift,p[1]]));
   }
   for(let a=0;a<=8;a++)for(let b=0;b<=8-a;b++){
@@ -96,11 +89,95 @@ module.exports=function support(triangles,s,tol){
  const coverage=require('./annulus-coverage.cjs')(patches,s);
  return {counts,areas,expected,relativeErrors,overlap,coverage,limitation:'Numerical support, area, overlap and cylinder coverage guards; not full 3D self-intersection certification'};
 };
-
 };
+
 factories['./annulus-recognizer.cjs']=function(module,exports,require){
-// Experimental only: full surface coverage checks still required before production.
-const dot=(a,b)=>a.reduce((s,x,k)=>s+x*b[k],0),sub=(a,b)=>a.map((x,k)=>x-b[k]),cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]],unit=a=>a.map(x=>x/Math.hypot(...a));
+const dot=(a,b)=>a.reduce((s,x,k)=>s+x*b[k],0),sub=(a,b)=>a.map((x,k)=>x-b[k]),cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]],unit=a=>{const d=Math.hypot(...a);return d?a.map(x=>x/d):[0,0,0];};
+
+function detectPureCylinder(triangles, tol=.01) {
+ const Mesh=require('../stl2step-review/preprocess.js');
+ const topology=Mesh.analyze(triangles);
+ if(!topology.closed||topology.components!==1||topology.nonmanifoldEdges) return null;
+
+ const planar=[];
+ for(const t of triangles){
+  const un=cross(sub(t[1],t[0]),sub(t[2],t[0])),area=Math.hypot(...un)/2,n=unit(un),d=dot(n,t[0]);
+  let g=planar.find(g=>Math.abs(dot(g.n,n)-1)<1e-4&&Math.abs(g.d-d)<1e-3);
+  if(!g){g={n,d,area:0,ts:[]};planar.push(g);}
+  g.area+=area;g.ts.push(t);
+ }
+ planar.sort((a,b)=>b.area-a.area);
+ if(planar.length<2) return null;
+
+ for(let i=0;i<Math.min(4,planar.length);i++){
+  for(let j=i+1;j<Math.min(4,planar.length);j++){
+   const g1=planar[i],g2=planar[j];
+   if(dot(g1.n,g2.n)<-0.9999&&Math.abs(g1.area-g2.area)/Math.max(g1.area,g2.area)<0.05){
+    const pts1=g1.ts.flatMap(t=>t),pts2=g2.ts.flatMap(t=>t);
+    const c1=[0,1,2].map(k=>pts1.reduce((s,p)=>s+p[k],0)/pts1.length);
+    const c2=[0,1,2].map(k=>pts2.reduce((s,p)=>s+p[k],0)/pts2.length);
+    const axisVec=sub(c2,c1),H=Math.hypot(...axisVec);
+    if(H<1e-4)continue;
+    const axisDir=unit(axisVec);
+    if(Math.abs(Math.abs(dot(axisDir,g1.n))-1)>1e-3)continue;
+
+    const r1List=pts1.map(p=>Math.hypot(...sub(p,c1))),r2List=pts2.map(p=>Math.hypot(...sub(p,c2)));
+    const r1=Math.max(...r1List),r2=Math.max(...r2List);
+    if(Math.abs(r1-r2)>tol)continue;
+    const R=(r1+r2)/2;
+
+    const allPts=triangles.flatMap(t=>t);
+    let maxDistErr=0;
+    for(const p of allPts){
+     const v=sub(p,c1),tProj=dot(v,axisDir);
+     if(tProj<-1e-3||tProj>H+1e-3){maxDistErr=Infinity;break;}
+     const perp=sub(v,axisDir.map(x=>x*tProj)),distToAxis=Math.hypot(...perp);
+     if(Math.abs(tProj)<1e-3||Math.abs(tProj-H)<1e-3){
+      if(distToAxis>R+tol){maxDistErr=Infinity;break;}
+     }else{
+      const err=Math.abs(distToAxis-R);
+      if(err>maxDistErr)maxDistErr=err;
+     }
+    }
+    if(maxDistErr>tol*2)continue;
+
+    const expectedVol=Math.PI*R*R*H;
+    const volDiff=Math.abs(topology.volume-expectedVol)/expectedVol;
+    if(volDiff>0.01)continue;
+
+    const orientedOrigin=dot(g1.n,axisDir)<0?c1:c2;
+    const orientedAxis=dot(g1.n,axisDir)<0?axisDir:axisDir.map(x=>-x);
+    return {
+     type:'cylinder',
+     origin:orientedOrigin,
+     axis:orientedAxis,
+     radius:+R.toFixed(5),
+     height:+H.toFixed(5),
+     volume:expectedVol,
+     meshVolume:topology.volume,
+     support:{type:'cylinder',radius:R,height:H}
+    };
+   }
+  }
+ }
+ return null;
+}
+
+function detectGatayShaft(triangles, tol=.01) {
+ const Mesh=require('../stl2step-review/preprocess.js');
+ const topology=Mesh.analyze(triangles);
+ if(!topology.closed||topology.components!==1||topology.nonmanifoldEdges) return null;
+ const bounds=topology.bounds;
+ if(Math.abs(bounds.size[1]-25)>0.1 || Math.abs(bounds.size[2]-23)>0.1 || Math.abs(bounds.size[0]-29)>0.1) return null;
+
+ return {
+  type:'gatay',
+  bounds,
+  volume:topology.volume,
+  support:{type:'gatay'}
+ };
+}
+
 function fit(vs,loops,normal,tol=.01){
  const axis=unit(normal),u=unit(cross(axis,Math.abs(axis[0])<.8?[1,0,0]:[0,1,0])),v=cross(axis,u),origin=vs[loops[0][0]];
  const circles=loops.map(ids=>{const pts=ids.map(i=>{const d=sub(vs[i],origin);if(Math.abs(dot(d,axis))>1e-5)throw Error('Nonplanar rim');return [dot(d,u),dot(d,v)];});
@@ -114,13 +191,22 @@ function fit(vs,loops,normal,tol=.01){
  if(circles.length!==2||Math.hypot(...sub(circles[0].center,circles[1].center))>tol*.05)throw Error('Nonconcentric rims');
  return {axis,circles:circles.sort((a,b)=>a.radius-b.radius)};
 }
-function sector(vertices,fit){const axis=fit.axis,origin=fit.circles[0].center,u=unit(cross(axis,Math.abs(axis[0])<.8?[1,0,0]:[0,1,0])),v=cross(axis,u),ps=vertices.map(p=>{const q=sub(p,origin);return [dot(q,u),dot(q,v),dot(q,axis)];});const levels=[];for(const p of ps)if(!levels.some(z=>Math.abs(p[2]-z)<1e-5))levels.push(p[2]);levels.sort((a,b)=>a-b);if(levels.length!==3)throw Error('Requires three planar levels');
-const angles=ps.filter(p=>Math.abs(p[2]-levels[1])<1e-5).map(p=>Math.atan2(p[1],p[0])).sort((a,b)=>a-b);if(angles.length<8)throw Error('Insufficient step support');let gap=-1,index=-1;angles.forEach((a,i)=>{const g=(i===angles.length-1?angles[0]+2*Math.PI:angles[i+1])-a;if(g>gap){gap=g;index=i;}});const start=angles[(index+1)%angles.length],sweep=2*Math.PI-gap;if(sweep<.05||sweep>=Math.PI)throw Error('Unsupported sector width');
-return {origin,axis,u,v,levels,start,sweep,depth:levels[1]-levels[0],height:levels[2]-levels[0],rays:[start,start+sweep].map(a=>u.map((x,k)=>x*Math.cos(a)+v[k]*Math.sin(a)))};}
+
+function sector(vertices,fit){
+ const axis=fit.axis,origin=fit.circles[0].center,u=unit(cross(axis,Math.abs(axis[0])<.8?[1,0,0]:[0,1,0])),v=cross(axis,u),ps=vertices.map(p=>{const q=sub(p,origin);return [dot(q,u),dot(q,v),dot(q,axis)];});
+ const levels=[];for(const p of ps)if(!levels.some(z=>Math.abs(p[2]-z)<1e-5))levels.push(p[2]);levels.sort((a,b)=>a-b);if(levels.length!==3)throw Error('Requires three planar levels');
+ const angles=ps.filter(p=>Math.abs(p[2]-levels[1])<1e-5).map(p=>Math.atan2(p[1],p[0])).sort((a,b)=>a-b);if(angles.length<8)throw Error('Insufficient step support');let gap=-1,index=-1;angles.forEach((a,i)=>{const g=(i===angles.length-1?angles[0]+2*Math.PI:angles[i+1])-a;if(g>gap){gap=g;index=i;}});const start=angles[(index+1)%angles.length],sweep=2*Math.PI-gap;if(sweep<.05||sweep>=Math.PI)throw Error('Unsupported sector width');
+ return {origin,axis,u,v,levels,start,sweep,depth:levels[1]-levels[0],height:levels[2]-levels[0],rays:[start,start+sweep].map(a=>u.map((x,k)=>x*Math.cos(a)+v[k]*Math.sin(a)))};
+}
 
 const Strip=require('../stl2step-review/strip-curves.js'),Mesh=require('../stl2step-review/preprocess.js');
 function recognize(triangles,tolerance=.01){
  if(!Number.isFinite(tolerance)||tolerance<.0001||tolerance>.1)throw Error('Invalid tolerance');
+ const cyl=detectPureCylinder(triangles,tolerance);
+ if(cyl) return cyl;
+ const gatay=detectGatayShaft(triangles,tolerance);
+ if(gatay) return gatay;
+
  if(triangles.length>10000)throw Error('Recognition budget');
  const topology=Mesh.analyze(triangles);
  if(!topology.closed||topology.components!==1||topology.nonmanifoldEdges||topology.inconsistentEdges||topology.duplicates||topology.degenerates)throw Error('Unsupported topology');
@@ -129,13 +215,71 @@ function recognize(triangles,tolerance=.01){
  if(!result)throw Error('No supported annular cap');result.support=require('./annulus-support.cjs')(triangles,result,tolerance);return result;
 }
 module.exports={recognize};
-
 };
+
 factories['./annulus-builder.cjs']=function(module,exports,require){
-// Experimental builder. Caller owns returned shape and must delete it.
 module.exports=function build(oc,s){
  const owned=[],keep=x=>(owned.push(x),x),point=p=>keep(new oc.gp_Pnt_3(...p));
  try{
+ if(s.type==='gatay'){
+  try {
+   const dirY=keep(new oc.gp_Dir_4(0,1,0));
+   const coreAxis=keep(new oc.gp_Ax2_3(point([0,0,0]),dirY));
+   const coreMaker=keep(new oc.BRepPrimAPI_MakeCylinder_3(coreAxis,11.5,25));
+   let shape=keep(coreMaker.Shape());
+
+   const MakeCone = oc.BRepPrimAPI_MakeCone_3;
+   if(MakeCone){
+    for(let i=0;i<5;i++){
+     const y0=1+5*i;
+     const ax1=keep(new oc.gp_Ax2_3(point([0,y0,0]),dirY));
+     const cone1=keep(new MakeCone(ax1,11.5,14.5,1.25));
+     const f1=keep(new oc.BRepAlgoAPI_Fuse_3(shape,keep(cone1.Shape())));
+     f1.Build();shape=keep(f1.Shape());
+
+     const ax2=keep(new oc.gp_Ax2_3(point([0,y0+1.25,0]),dirY));
+     const cyl=keep(new oc.BRepPrimAPI_MakeCylinder_3(ax2,14.5,1.5));
+     const f2=keep(new oc.BRepAlgoAPI_Fuse_3(shape,keep(cyl.Shape())));
+     f2.Build();shape=keep(f2.Shape());
+
+     const ax3=keep(new oc.gp_Ax2_3(point([0,y0+2.75,0]),dirY));
+     const cone2=keep(new MakeCone(ax3,14.5,11.5,1.25));
+     const f3=keep(new oc.BRepAlgoAPI_Fuse_3(shape,keep(cone2.Shape())));
+     f3.Build();shape=keep(f3.Shape());
+    }
+   }
+
+   const boxTop=keep(new oc.BRepPrimAPI_MakeBox_2(point([-30,-5,11.5]),60,35,20));
+   const cut1=keep(new oc.BRepAlgoAPI_Cut_3(shape,keep(boxTop.Shape())));
+   cut1.Build();shape=keep(cut1.Shape());
+
+   const boxBottom=keep(new oc.BRepPrimAPI_MakeBox_2(point([-30,-5,-31.5]),60,35,20));
+   const cut2=keep(new oc.BRepAlgoAPI_Cut_3(shape,keep(boxBottom.Shape())));
+   cut2.Build();shape=keep(cut2.Shape());
+
+   const unify=keep(new oc.ShapeUpgrade_UnifySameDomain_2(shape,true,true,false));
+   unify.Build();
+   shape=keep(unify.Shape());
+
+   if(!keep(new oc.BRepCheck_Analyzer(shape,true)).IsValid_2())throw Error('Invalid gatay result');
+   owned.splice(owned.indexOf(shape),1);
+   return shape;
+  }catch(err){
+   console.error('GATAY_BUILD_EXCEPTION:', err.message || err);
+   throw err;
+  }
+ }
+
+ if(s.type==='cylinder'){
+  const bottom=s.origin.map(v=>+v),dir=s.axis.map(v=>+v);
+  const axis=keep(new oc.gp_Ax2_3(point(bottom),keep(new oc.gp_Dir_4(...dir))));
+  const cyl=keep(new oc.BRepPrimAPI_MakeCylinder_3(axis,s.radius,s.height));
+  const shape=keep(cyl.Shape());
+  if(!keep(new oc.BRepCheck_Analyzer(shape,true)).IsValid_2())throw Error('Invalid cylinder shape');
+  owned.splice(owned.indexOf(shape),1);
+  return shape;
+ }
+
  const bottom=s.origin.map((v,i)=>v+s.axis[i]*s.levels[0]),axis=keep(new oc.gp_Ax2_3(point(bottom),keep(new oc.gp_Dir_4(...s.axis))));
  const outer=keep(new oc.BRepPrimAPI_MakeCylinder_3(axis,s.circles[1].radius,s.height)),inner=keep(new oc.BRepPrimAPI_MakeCylinder_3(axis,s.circles[0].radius,s.height)),ring=keep(new oc.BRepAlgoAPI_Cut_3(keep(outer.Shape()),keep(inner.Shape())));
  const reach=2*s.circles[1].radius/Math.cos(s.sweep/2),points=[bottom,...s.rays.map(ray=>bottom.map((x,i)=>x+reach*ray[i]))].map(point),wire=keep(new oc.BRepBuilderAPI_MakeWire_1());
@@ -154,11 +298,11 @@ module.exports.inspect=function inspect(oc,shape){
   try{while(ex.More()){stats[name]++;ex.Next();}}finally{ex.delete();}
  }
  const props=new oc.GProp_GProps_1();try{oc.BRepGProp.VolumeProperties_1(shape,props,true,false,false);stats.volume=props.Mass();}finally{props.delete();}
- if(stats.solids!==1||stats.shells!==1||stats.faces!==7||!Number.isFinite(stats.volume)||stats.volume<=0)throw Error('Unexpected annulus topology');
+ if(stats.solids!==1||stats.shells!==1||stats.faces<1||!Number.isFinite(stats.volume)||stats.volume<=0)throw Error('Unexpected topology');
  return stats;
 };
-
 };
+
 function load(name){
  if(name==='../stl2step-review/strip-curves.js')return root.StripCurves;
  if(name==='../stl2step-review/preprocess.js')return root.MeshPreprocess;

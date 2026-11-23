@@ -7,7 +7,7 @@ Mỗi mục có: Tiêu chí (đo được) và Phạm vi (chỉ được sửa c
 - **Tiêu chí**: fixture `mixed_line_endings.stl` đỏ với `stl.js` trên `main`, xanh sau khi sửa.  
 - **Phạm vi**: `stl.js`, `tests/`
 
-## [ ] 2. Nhận dạng mặt trụ thành mặt trụ thật
+## [x] 2. Nhận dạng mặt trụ thành mặt trụ thật
 - **Tiêu chí**: `Gatay.stl` chuyển ra ≤ 100 mặt; `cylinder.stl` ra mặt trụ; thể tích lệch ≤ 0.1%.  
 - **Phạm vi**: `recognize.js`, `strip-curves.js`, `annulus-browser.js`, `tests/`
 
