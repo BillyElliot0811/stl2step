@@ -41,8 +41,18 @@ const STL = (() => {
       catch { throw new Error('STL nhị phân bị thiếu dữ liệu hoặc số tam giác trong header không khớp.'); }
       if (!/^\s*solid(?:\s|$)/i.test(text) || text.includes('\0')) throw new Error('File không phải STL hợp lệ, hoặc STL nhị phân bị thiếu/thừa dữ liệu.');
       let state = 'solid', tri = [], solids = 0;
-      for (const raw of text.split(/\r\n|\r|\n/)) {
-        const line = raw.trim();
+      let pos = 0, len = text.length;
+      const delim = text.indexOf('\n') === -1 && text.indexOf('\r') !== -1 ? '\r' : '\n';
+      while (pos < len) {
+        const next = text.indexOf(delim, pos);
+        let line;
+        if (next === -1) {
+          line = text.slice(pos).trim();
+          pos = len;
+        } else {
+          line = text.slice(pos, next).trim();
+          pos = next + 1;
+        }
         if (!line) continue;
         if (state === 'solid' && /^solid(?:\s.*)?$/i.test(line)) { state = 'facet'; solids++; }
         else if (state === 'facet' && /^endsolid(?:\s.*)?$/i.test(line)) state = 'solid';
