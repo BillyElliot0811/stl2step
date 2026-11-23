@@ -3,7 +3,7 @@
 Quy ước: `## [ ] N. Tên` là việc chưa làm, `## [x]` là đã xong.  
 Mỗi mục có: Tiêu chí (đo được) và Phạm vi (chỉ được sửa các file này).
 
-## [ ] 1. Parser ASCII xử lý kiểu xuống dòng hỗn hợp
+## [x] 1. Parser ASCII xử lý kiểu xuống dòng hỗn hợp
 - **Tiêu chí**: fixture `mixed_line_endings.stl` đỏ với `stl.js` trên `main`, xanh sau khi sửa.  
 - **Phạm vi**: `stl.js`, `tests/`
 
