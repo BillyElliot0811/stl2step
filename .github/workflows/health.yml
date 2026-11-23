@@ -1,7 +1,7 @@
 name: health-check-pages
 on:
   schedule:
-    - cron: '*/30 * * * *'
+    - cron: '17,47 * * * *'
   workflow_dispatch:
 permissions:
   contents: write
