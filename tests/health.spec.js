@@ -1,18 +1,16 @@
 const { test, expect } = require('@playwright/test');
 
-test('Health check: convert STL to STEP', async ({ page }) => {
-  const liveUrl = process.env.LIVE_URL;
-  await page.goto(liveUrl);
+test('Health check: STL → STEP trên trang thật', async ({ page }) => {
+  await page.goto(process.env.LIVE_URL);
+  await page.setInputFiles('#file', 'tests/fixtures/cube.stl');
 
-  // Upload cube STL fixture (copy selector from e2e test)
-  const fileInput = await page.$('input[type="file"]');
-  await fileInput.setInputFiles('tests/fixtures/cube.stl');
+  // SAO CHÉP nguyên dòng định nghĩa goBtn và dòng click từ tests/e2e.spec.js (khoảng dòng 22 đến 25)
+  const goBtn = page.locator('#go');
+  await expect(goBtn).toBeEnabled({ timeout: 10000 });
+  await goBtn.click();
 
-  // Click convert button (selector from e2e test)
-  await page.click('#convert-button');
-
-  // Wait for download link to appear (max 90s)
-  const downloadLink = await page.waitForSelector('#dl', { timeout: 90000 });
-  const href = await downloadLink.getAttribute('href');
-  expect(href).toMatch(/\.step$/);
+  const dlLink = page.locator('#dl');
+  await expect(dlLink).toBeVisible({ timeout: 90000 });
+  const downloadAttr = await dlLink.getAttribute('download');
+  expect(downloadAttr).toMatch(/\.step$/i);
 });

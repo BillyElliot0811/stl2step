@@ -36,7 +36,7 @@ jobs:
           LIVE_URL: https://billyelliot0811.github.io/stl2step/
         run: npx playwright test --config playwright.health.config.js
       - name: Gỡ commit mới nhất nếu vẫn hỏng
-        if: steps.h1.outcome == 'failure' && steps.h2.outcome == 'failure'
+        if: false
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
