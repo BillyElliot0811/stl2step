@@ -175,6 +175,9 @@ async function run() {
     try { newRes = STL.parse(arrayBuf, true); } catch (e) { newErr = e; }
 
     if (oldErr || newErr) {
+      if (file === 'mixed_line_endings.stl') {
+        console.log(`File ASCII hỗn hợp: không khớp - một bản ném lỗi: oldErr=${oldErr?.message}, newErr=${newErr?.message}`);
+      }
       if (!oldErr || !newErr) {
         throw new Error(`[${file}] Một bản ném lỗi còn bản kia không: oldErr=${oldErr?.message}, newErr=${newErr?.message}`);
       }
@@ -188,7 +191,11 @@ async function run() {
 
       compareResults(file, oldRes, newRes, normals);
       totalTestedTriangles += newRes.total;
-      console.log(`✓ Fixture [${file}]: Khớp hoàn toàn (${newRes.triangles.length}/${newRes.total} tam giác, sai lệch <= 1e-9)`);
+      if (file === 'mixed_line_endings.stl') {
+        console.log(`File ASCII hỗn hợp: ${newRes.triangles.length} tam giác, khớp hoàn toàn`);
+      } else {
+        console.log(`✓ Fixture [${file}]: Khớp hoàn toàn (${newRes.triangles.length}/${newRes.total} tam giác, sai lệch <= 1e-9)`);
+      }
     }
   }
 

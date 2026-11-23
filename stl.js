@@ -41,18 +41,14 @@ const STL = (() => {
       catch { throw new Error('STL nhị phân bị thiếu dữ liệu hoặc số tam giác trong header không khớp.'); }
       if (!/^\s*solid(?:\s|$)/i.test(text) || text.includes('\0')) throw new Error('File không phải STL hợp lệ, hoặc STL nhị phân bị thiếu/thừa dữ liệu.');
       let state = 'solid', tri = [], solids = 0;
-      let pos = 0, len = text.length;
-      const delim = text.indexOf('\n') === -1 && text.indexOf('\r') !== -1 ? '\r' : '\n';
-      while (pos < len) {
-        const next = text.indexOf(delim, pos);
-        let line;
-        if (next === -1) {
-          line = text.slice(pos).trim();
-          pos = len;
-        } else {
-          line = text.slice(pos, next).trim();
-          pos = next + 1;
-        }
+      let pos = 0;
+      const re = /\r\n|\r|\n/g;
+      let m;
+      do {
+        m = re.exec(text);
+        const end = m ? m.index : text.length;
+        const line = text.slice(pos, end).trim();
+        pos = m ? re.lastIndex : text.length;
         if (!line) continue;
         if (state === 'solid' && /^solid(?:\s.*)?$/i.test(line)) { state = 'facet'; solids++; }
         else if (state === 'facet' && /^endsolid(?:\s.*)?$/i.test(line)) state = 'solid';
@@ -64,7 +60,7 @@ const STL = (() => {
           triangles.push(tri); state = 'facet';
           if (triangles.length > MAX_TRIANGLES) throw new Error('STL vượt giới hạn 20.000 tam giác. Hãy đơn giản hóa lưới trước.');
         } else throw new Error('Cấu trúc STL ASCII không hợp lệ hoặc facet bị thiếu đỉnh.');
-      }
+      } while (m);
       if (state !== 'solid' || !solids) throw new Error('STL ASCII bị thiếu endfacet hoặc endsolid.');
     }
     const total = triangles.length;

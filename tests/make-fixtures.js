@@ -176,6 +176,30 @@ function makeCorruptText() {
   ].join('\n');
 }
 
+// 8. mixed_line_endings.stl (file ASCII 9 facet xen kẽ LF, CRLF và CR đơn lẻ)
+function makeMixedLineEndings() {
+  const lineEndings = ['\n', '\r\n', '\r'];
+  const lines = ['solid mixed_line_endings'];
+  for (let i = 0; i < 9; i++) {
+    const x = i * 2;
+    lines.push('  facet normal 0.000000 0.000000 1.000000');
+    lines.push('    outer loop');
+    lines.push(`      vertex ${x}.000000 0.000000 0.000000`);
+    lines.push(`      vertex ${x + 1}.000000 0.000000 0.000000`);
+    lines.push(`      vertex ${x}.000000 1.000000 0.000000`);
+    lines.push('    endloop');
+    lines.push('  endfacet');
+  }
+  lines.push('endsolid mixed_line_endings');
+
+  let result = '';
+  for (let i = 0; i < lines.length; i++) {
+    const ending = lineEndings[i % lineEndings.length];
+    result += lines[i] + ending;
+  }
+  return result;
+}
+
 const files = {
   'cube.stl': toAsciiStl('cube', makeCube()),
   'cylinder.stl': toAsciiStl('cylinder', makeCylinder(5, 10, 48)),
@@ -184,6 +208,7 @@ const files = {
   'edge_contact_single_body.stl': toAsciiStl('edge_contact_single_body', makeEdgeContactSingleBody()),
   'open_mesh.stl': toAsciiStl('open_mesh', makeOpenMesh()),
   'corrupt_text.stl': makeCorruptText(),
+  'mixed_line_endings.stl': makeMixedLineEndings(),
 };
 
 console.log('=== Sinh các file STL fixtures ===');
