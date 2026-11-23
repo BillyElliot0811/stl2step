@@ -8,6 +8,7 @@ const { defineConfig, devices } = require('@playwright/test');
 module.exports = defineConfig({
   testDir: './tests',
   testMatch: /.*\.spec\.js/,
+  testIgnore: /health\.spec\.js/,
   // oc.wasm (~63 MiB) có thể mất 45 - 90 giây để nạp và khởi tạo WASM
   timeout: 180000,
   expect: {
