@@ -12,6 +12,7 @@ main{max-width:1920px;margin:24px auto;padding:0 24px 32px}.sub{margin-bottom:20
 .step[data-state="completed"] .step-title{color:var(--text)}
 .step[data-state="pending"]{opacity:.6}
 
+#renderMode[hidden]{display:none!important}
 .view-mode-wrap{display:flex;align-items:center;gap:8px}
 .view-mode-title{color:#adbed2;font-size:12px}
 .view-buttons{display:inline-flex;background:#273446;border:1px solid #52647a;border-radius:6px;padding:2px;gap:2px}
