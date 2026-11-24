@@ -52,13 +52,14 @@ test.describe('Kiểm thử nhận dạng mặt trụ TỔNG QUÁT', () => {
   });
 
   const testCylinders = [
-    { filename: 'cylinder_8x20.stl', r: 8, h: 20 },
-    { filename: 'cylinder_30x6.stl', r: 30, h: 6 },
-    { filename: 'cylinder_12x40.stl', r: 12, h: 40 },
+    { filename: 'cylinder_8x20_96.stl', r: 8, h: 20, segs: 96, maxDiff: 0.001, label: 'Lưới mịn >= 96 đoạn (đạt tiêu chí ROADMAP <= 0.1%)' },
+    { filename: 'cylinder_8x20.stl', r: 8, h: 20, segs: 48, maxDiff: 0.003, label: 'Lưới 48 đoạn (giới hạn đa giác nội tiếp <= 0.3%)' },
+    { filename: 'cylinder_30x6.stl', r: 30, h: 6, segs: 48, maxDiff: 0.003, label: 'Lưới 48 đoạn (giới hạn đa giác nội tiếp <= 0.3%)' },
+    { filename: 'cylinder_12x40.stl', r: 12, h: 40, segs: 48, maxDiff: 0.003, label: 'Lưới 48 đoạn (giới hạn đa giác nội tiếp <= 0.3%)' },
   ];
 
   for (const c of testCylinders) {
-    test(`Mô hình ${c.filename} (R=${c.r}, H=${c.h}) phải được nhận dạng thành mặt trụ thật`, async ({ page }) => {
+    test(`Mô hình ${c.filename} (R=${c.r}, H=${c.h}, N=${c.segs}) - ${c.label}`, async ({ page }) => {
       const meshVolume = computeStlMeshVolume(path.join(FIXTURES_DIR, c.filename));
       expect(meshVolume).toBeGreaterThan(0);
 
@@ -103,11 +104,14 @@ test.describe('Kiểm thử nhận dạng mặt trụ TỔNG QUÁT', () => {
 
       // Thể tích hình trụ tròn thật từ STEP
       const stepVolume = Math.PI * rStep * rStep * c.h;
-      // Với lưới 48 đoạn nội tiếp, thể tích lưới đa giác nhỏ hơn thể tích hình trụ tròn đúng ~0.286%
-      const theoreticalRelDiff = (Math.PI - 24 * Math.sin(Math.PI / 24)) / (24 * Math.sin(Math.PI / 24));
+      // Sai lệch lý thuyết giữa hình tròn và đa giác N cạnh nội tiếp
+      const theoreticalRelDiff = (Math.PI - (c.segs / 2) * Math.sin((2 * Math.PI) / c.segs)) / ((c.segs / 2) * Math.sin((2 * Math.PI) / c.segs));
       const actualRelDiff = (stepVolume - meshVolume) / meshVolume;
       console.log(`${c.filename}: meshVol=${meshVolume.toFixed(3)} mm3, stepVol=${stepVolume.toFixed(3)} mm3, chênh lệch thực tế=${(actualRelDiff * 100).toFixed(4)}% (lý thuyết hình học: ${(theoreticalRelDiff * 100).toFixed(4)}%)`);
+      
+      // ASSERT THỰC SỰ theo tiêu chí:
       expect(stepVolume).toBeGreaterThan(meshVolume);
+      expect(actualRelDiff).toBeLessThanOrEqual(c.maxDiff);
       expect(Math.abs(actualRelDiff - theoreticalRelDiff)).toBeLessThanOrEqual(0.0001);
     });
   }

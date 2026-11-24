@@ -204,6 +204,7 @@ const files = {
   'cube.stl': toAsciiStl('cube', makeCube()),
   'cylinder.stl': toAsciiStl('cylinder', makeCylinder(5, 10, 48)),
   'cylinder_8x20.stl': toAsciiStl('cylinder_8x20', makeCylinder(8, 20, 48)),
+  'cylinder_8x20_96.stl': toAsciiStl('cylinder_8x20_96', makeCylinder(8, 20, 96)),
   'cylinder_30x6.stl': toAsciiStl('cylinder_30x6', makeCylinder(30, 6, 48)),
   'cylinder_12x40.stl': toAsciiStl('cylinder_12x40', makeCylinder(12, 40, 48)),
   'planar_hole.stl': toAsciiStl('planar_hole', makePlanarHole()),
