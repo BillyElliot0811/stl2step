@@ -90,20 +90,53 @@ test.describe('Kiểm thử nhận dạng mặt trụ TỔNG QUÁT', () => {
       console.log(`${c.filename}: tổng số mặt ADVANCED_FACE = ${faceMatches.length}`);
       expect(faceMatches.length).toBeLessThanOrEqual(4);
 
-      // Trích xuất bán kính trụ từ STEP
-      // Định dạng: CYLINDRICAL_SURFACE ( '', #..., <radius> )
-      const cylRadiusMatch = stepContent.match(/CYLINDRICAL_SURFACE\s*\(\s*'[^']*'\s*,\s*#\d+\s*,\s*([-\d.eE]+)\s*\)/);
-      expect(cylRadiusMatch).toBeTruthy();
-      const rStep = parseFloat(cylRadiusMatch[1]);
+      // Trích xuất bán kính và trục của CYLINDRICAL_SURFACE từ file STEP
+      // Định dạng: CYLINDRICAL_SURFACE ( '', #axisId, <radius> )
+      const cylMatch = stepContent.match(/CYLINDRICAL_SURFACE\s*\(\s*'[^']*'\s*,\s*#(\d+)\s*,\s*([-\d.eE]+)\s*\)/);
+      expect(cylMatch).toBeTruthy();
+      const axisPlacementId = cylMatch[1];
+      const rStep = parseFloat(cylMatch[2]);
       const diameter = 2 * rStep;
 
-      // Đo đường kính và bán kính thực trong file STEP: phải đúng 100% kích thước danh nghĩa (R=8.00 -> D=16.00 mm)
-      console.log(`${c.filename}: STEP Radius=${rStep.toFixed(3)} mm, Diameter=${diameter.toFixed(3)} mm (kỳ vọng: D=${(2*c.r).toFixed(2)} mm)`);
+      // Trích xuất vector trục từ AXIS2_PLACEMENT_3D -> DIRECTION
+      const axisPlacementRegex = new RegExp('#' + axisPlacementId + '\\s*=\\s*AXIS2_PLACEMENT_3D\\s*\\(\\s*\'[^\']*\'\\s*,\\s*#(\\d+)\\s*,\\s*#(\\d+)\\s*,\\s*#(\\d+)\\s*\\)');
+      const axisMatch = stepContent.match(axisPlacementRegex);
+      expect(axisMatch).toBeTruthy();
+      const axisDirId = axisMatch[2];
+
+      const dirRegex = new RegExp('#' + axisDirId + '\\s*=\\s*DIRECTION\\s*\\(\\s*\'[^\']*\'\\s*,\\s*\\(\\s*([-\\d.eE]+)\\s*,\\s*([-\\d.eE]+)\\s*,\\s*([-\\d.eE]+)\\s*\\)\\s*\\)');
+      const dirMatch = stepContent.match(dirRegex);
+      expect(dirMatch).toBeTruthy();
+      const ax = parseFloat(dirMatch[1]);
+      const ay = parseFloat(dirMatch[2]);
+      const az = parseFloat(dirMatch[3]);
+      const aLen = Math.hypot(ax, ay, az);
+      const dir = [ax / aLen, ay / aLen, az / aLen];
+
+      // Đọc toàn bộ CARTESIAN_POINT từ file STEP để đo chiều cao dọc theo trục hình trụ
+      const ptMatches = [...stepContent.matchAll(/CARTESIAN_POINT\s*\(\s*'[^']*'\s*,\s*\(\s*([-\d.eE]+)\s*,\s*([-\d.eE]+)\s*,\s*([-\d.eE]+)\s*\)\s*\)/g)];
+      expect(ptMatches.length).toBeGreaterThan(0);
+
+      const projections = ptMatches.map(m => {
+        const x = parseFloat(m[1]);
+        const y = parseFloat(m[2]);
+        const z = parseFloat(m[3]);
+        return x * dir[0] + y * dir[1] + z * dir[2];
+      });
+
+      const minProj = Math.min(...projections);
+      const maxProj = Math.max(...projections);
+      // Chiều cao hStep được đo trực tiếp 100% từ các điểm CARTESIAN_POINT trong STEP
+      const hStep = maxProj - minProj;
+
+      // Đo đường kính, bán kính và chiều cao thực trong file STEP: phải đúng 100% kích thước danh nghĩa
+      console.log(`${c.filename}: STEP Radius=${rStep.toFixed(3)} mm, Diameter=${diameter.toFixed(3)} mm, Height=${hStep.toFixed(3)} mm (kỳ vọng: D=${(2*c.r).toFixed(2)} mm, H=${c.h.toFixed(2)} mm)`);
       expect(Math.abs(rStep - c.r)).toBeLessThanOrEqual(0.001);
       expect(Math.abs(diameter - 2 * c.r)).toBeLessThanOrEqual(0.001);
+      expect(Math.abs(hStep - c.h)).toBeLessThanOrEqual(0.001);
 
-      // Thể tích hình trụ tròn thật từ STEP
-      const stepVolume = Math.PI * rStep * rStep * c.h;
+      // Thể tích hình trụ tròn thật tính từ kích thước đo trực tiếp từ file STEP (rStep và hStep)
+      const stepVolume = Math.PI * rStep * rStep * hStep;
       // Sai lệch lý thuyết giữa hình tròn và đa giác N cạnh nội tiếp
       const theoreticalRelDiff = (Math.PI - (c.segs / 2) * Math.sin((2 * Math.PI) / c.segs)) / ((c.segs / 2) * Math.sin((2 * Math.PI) / c.segs));
       const actualRelDiff = (stepVolume - meshVolume) / meshVolume;
