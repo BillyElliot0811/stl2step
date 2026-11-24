@@ -36,6 +36,25 @@
     if (label) $('progressText').textContent = label;
   }
 
+  function updateStepper(currentStep) {
+    const stepper = $('stepper');
+    if (!stepper) return;
+    const steps = stepper.querySelectorAll('.step');
+    steps.forEach((step, idx) => {
+      const stepNum = idx + 1;
+      if (stepNum < currentStep) {
+        step.setAttribute('data-state', 'completed');
+        step.removeAttribute('aria-current');
+      } else if (stepNum === currentStep) {
+        step.setAttribute('data-state', 'active');
+        step.setAttribute('aria-current', 'step');
+      } else {
+        step.setAttribute('data-state', 'pending');
+        step.removeAttribute('aria-current');
+      }
+    });
+  }
+
   function clearDownload() {
     $('elapsed').hidden = true;
     $('progressContainer').hidden = true;
@@ -44,6 +63,7 @@
     downloadURL = null;
     $('dl').removeAttribute('href'); $('dl').removeAttribute('download'); $('downloadBox').hidden = true;
     $('warnings').replaceChildren();
+    updateStepper(1);
   }
 
   function busy(value) {
@@ -57,6 +77,7 @@
     if (value) {
       updateProgress(0, 'Đang chuẩn bị…');
       $('errorBox').hidden = true;
+      updateStepper(2);
     }
   }
 
@@ -205,6 +226,7 @@
           }
           updateProgress(100, 'Hoàn tất chuyển đổi!');
           if (!finish(job)) return;
+          updateStepper(3);
           try {
             downloadURL = URL.createObjectURL(new Blob([m.data],{type:'application/step'}));
             const base = job.file.name.replace(/\.stl$/i,'').replace(/[<>:"/\\|?*\x00-\x1f]/g,'_').replace(/[. ]+$/g,'') || 'model';
@@ -234,6 +256,34 @@
   window.addEventListener('pagehide',()=>{if (active) finish(active);clearDownload();});
   $('recoverCurves').addEventListener('change',()=>{$('curveTolerance').disabled=!$('recoverCurves').checked;});
 
+  function initViewButtons() {
+    const viewBoth = $('viewBoth');
+    const viewSolid = $('viewSolid');
+    const viewWire = $('viewWire');
+    const renderMode = $('renderMode');
+    const canvas = $('modelCanvas');
+    if (!viewBoth || !viewSolid || !viewWire || !renderMode) return;
+
+    function setViewMode(mode) {
+      renderMode.value = mode;
+      if (canvas) canvas.dataset.renderMode = mode;
+      renderMode.dispatchEvent(new Event('change'));
+      viewBoth.setAttribute('aria-pressed', String(mode === 'both'));
+      viewSolid.setAttribute('aria-pressed', String(mode === 'solid'));
+      viewWire.setAttribute('aria-pressed', String(mode === 'wire'));
+    }
+
+    viewBoth.addEventListener('click', () => setViewMode('both'));
+    viewSolid.addEventListener('click', () => setViewMode('solid'));
+    viewWire.addEventListener('click', () => setViewMode('wire'));
+
+    const initialMode = renderMode.value || 'solid';
+    if (canvas) canvas.dataset.renderMode = initialMode;
+    viewBoth.setAttribute('aria-pressed', String(initialMode === 'both'));
+    viewSolid.setAttribute('aria-pressed', String(initialMode === 'solid'));
+    viewWire.setAttribute('aria-pressed', String(initialMode === 'wire'));
+  }
+
   function repairOptions() {
     $('fillHoles').disabled = !$('repairMesh').checked;
     $('repairContacts').disabled = !$('repairMesh').checked;
@@ -245,6 +295,8 @@
   $('repairContacts').addEventListener('change',repairOptions);
   repairOptions();
   busy(false);
+  initViewButtons();
+  updateStepper(1);
 
   if (location.protocol === 'file:') {
     showError('Cần mở qua máy chủ HTTP', 'Cần mở web qua HTTP(S) để tải WebAssembly và Web Worker.', 'Trong thư mục chương trình, bấm CHAY-WEB.cmd hoặc chạy: python -m http.server 8000 rồi mở http://localhost:8000; không mở trực tiếp index.html.');
