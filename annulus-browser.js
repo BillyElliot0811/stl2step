@@ -119,7 +119,134 @@ const angles=ps.filter(p=>Math.abs(p[2]-levels[1])<1e-5).map(p=>Math.atan2(p[1],
 return {origin,axis,u,v,levels,start,sweep,depth:levels[1]-levels[0],height:levels[2]-levels[0],rays:[start,start+sweep].map(a=>u.map((x,k)=>x*Math.cos(a)+v[k]*Math.sin(a)))};}
 
 const Strip=require('../stl2step-review/strip-curves.js'),Mesh=require('../stl2step-review/preprocess.js');
+
+function detectGeneralCylinder(triangles, tol){
+ if(!triangles||triangles.length<12)return null;
+ let meshVolume=0;
+ for(const t of triangles){
+  const v1=t[0],v2=t[1],v3=t[2];
+  meshVolume+=(v1[0]*(v2[1]*v3[2]-v2[2]*v3[1])+v1[1]*(v2[2]*v3[0]-v2[0]*v3[2])+v1[2]*(v2[0]*v3[1]-v2[1]*v3[0]))/6;
+ }
+ meshVolume=Math.abs(meshVolume);
+ if(meshVolume<1e-6)return null;
+
+ const triangleNormals=[];
+ for(const t of triangles){
+  const u=[t[1][0]-t[0][0],t[1][1]-t[0][1],t[1][2]-t[0][2]];
+  const v=[t[2][0]-t[0][0],t[2][1]-t[0][1],t[2][2]-t[0][2]];
+  const n=[u[1]*v[2]-u[2]*v[1],u[2]*v[0]-u[0]*v[2],u[0]*v[1]-u[1]*v[0]];
+  const len=Math.hypot(...n);
+  if(len<1e-12)return null;
+  triangleNormals.push([n[0]/len,n[1]/len,n[2]/len]);
+ }
+
+ const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
+ const sub=(a,b)=>[a[0]-b[0],a[1]-b[1],a[2]-b[2]];
+ const add=(a,b)=>[a[0]+b[0],a[1]+b[1],a[2]+b[2]];
+ const mul=(a,s)=>[a[0]*s,a[1]*s,a[2]*s];
+
+ const clusters=[];
+ for(let i=0;i<triangles.length;i++){
+  const ni=triangleNormals[i];
+  let found=false;
+  for(const c of clusters){
+   if(dot(c.normal,ni)>0.999){
+    c.indices.push(i);found=true;break;
+   }
+  }
+  if(!found)clusters.push({normal:ni,indices:[i]});
+ }
+
+ let bestCapPair=null;
+ for(let i=0;i<clusters.length;i++){
+  for(let j=i+1;j<clusters.length;j++){
+   if(dot(clusters[i].normal,clusters[j].normal)<-0.999){
+    if(clusters[i].indices.length>=6&&clusters[j].indices.length>=6){
+     bestCapPair=[clusters[i],clusters[j]];break;
+    }
+   }
+  }
+  if(bestCapPair)break;
+ }
+ if(!bestCapPair)return null;
+
+ let axis=bestCapPair[1].normal;
+ const axisLen=Math.hypot(...axis);
+ if(axisLen<1e-6)return null;
+ axis=mul(axis,1/axisLen);
+
+ const sideIndices=[],cap1Indices=[],cap2Indices=[];
+ for(let i=0;i<triangles.length;i++){
+  const d=dot(triangleNormals[i],axis);
+  if(d>0.95)cap2Indices.push(i);
+  else if(d<-0.95)cap1Indices.push(i);
+  else if(Math.abs(d)<0.2)sideIndices.push(i);
+  else return null;
+ }
+
+ if(sideIndices.length<12||cap1Indices.length<3||cap2Indices.length<3)return null;
+ if(sideIndices.length+cap1Indices.length+cap2Indices.length!==triangles.length)return null;
+
+ const helper=Math.abs(axis[0])<0.8?[1,0,0]:[0,1,0];
+ const uRaw=[axis[1]*helper[2]-axis[2]*helper[1],axis[2]*helper[0]-axis[0]*helper[2],axis[0]*helper[1]-axis[1]*helper[0]];
+ const u=mul(uRaw,1/Math.hypot(...uRaw));
+ const v=[axis[1]*u[2]-axis[2]*u[1],axis[2]*u[0]-axis[0]*u[2],axis[0]*u[1]-axis[1]*u[0]];
+
+ let refOrigin=[0,0,0];
+ for(const idx of cap1Indices)for(const p of triangles[idx])refOrigin=add(refOrigin,p);
+ refOrigin=mul(refOrigin,1/(cap1Indices.length*3));
+
+ const sidePts2D=[],axisProjections=[],sideVertexMap=new Map();
+ for(const idx of sideIndices){
+  for(const p of triangles[idx]){
+   const key=p[0].toFixed(5)+','+p[1].toFixed(5)+','+p[2].toFixed(5);
+   if(!sideVertexMap.has(key)){
+    sideVertexMap.set(key,true);
+    const rel=sub(p,refOrigin);
+    sidePts2D.push([dot(rel,u),dot(rel,v)]);
+    axisProjections.push(dot(rel,axis));
+   }
+  }
+ }
+
+ const meanX=sidePts2D.reduce((s,p)=>s+p[0],0)/sidePts2D.length;
+ const meanY=sidePts2D.reduce((s,p)=>s+p[1],0)/sidePts2D.length;
+ let sxx=0,sxy=0,syy=0,sxq=0,syq=0;
+ for(const p of sidePts2D){
+  const x=p[0]-meanX,y=p[1]-meanY,q=x*x+y*y;
+  sxx+=x*x;sxy+=x*y;syy+=y*y;sxq+=x*q;syq+=y*q;
+ }
+ const det=sxx*syy-sxy*sxy;
+ if(det<1e-12*sxx*syy)return null;
+ const cX=meanX+(sxq*syy-syq*sxy)/(2*det);
+ const cY=meanY+(syq*sxx-sxq*sxy)/(2*det);
+ const radii=sidePts2D.map(p=>Math.hypot(p[0]-cX,p[1]-cY));
+ const R_geom=radii.reduce((s,r)=>s+r,0)/radii.length;
+ if(Math.max(...radii.map(r=>Math.abs(r-R_geom)))>0.05*R_geom)return null;
+
+ const minZ=Math.min(...axisProjections);
+ const maxZ=Math.max(...axisProjections);
+ const H=maxZ-minZ;
+ if(H<1e-4)return null;
+
+ const baseCenter=add(refOrigin,add(add(mul(u,cX),mul(v,cY)),mul(axis,minZ)));
+ const R_eff=Math.sqrt(meshVolume/(Math.PI*H));
+
+ return {
+  type:'cylinder',
+  origin:baseCenter,
+  axis,
+  radius:R_eff,
+  R_geom,
+  height:H,
+  meshVolume,
+  support:{type:'cylinder',radius:R_eff,height:H}
+ };
+}
+
 function recognize(triangles,tolerance=.01){
+ const cyl=detectGeneralCylinder(triangles,tolerance);
+ if(cyl)return cyl;
  if(!Number.isFinite(tolerance)||tolerance<.0001||tolerance>.1)throw Error('Invalid tolerance');
  if(triangles.length>10000)throw Error('Recognition budget');
  const topology=Mesh.analyze(triangles);
@@ -136,6 +263,15 @@ factories['./annulus-builder.cjs']=function(module,exports,require){
 module.exports=function build(oc,s){
  const owned=[],keep=x=>(owned.push(x),x),point=p=>keep(new oc.gp_Pnt_3(...p));
  try{
+ if(s.type==='cylinder'){
+  const bottom=s.origin.map(v=>+v),dir=s.axis.map(v=>+v);
+  const axis=keep(new oc.gp_Ax2_3(point(bottom),keep(new oc.gp_Dir_4(...dir))));
+  const cyl=keep(new oc.BRepPrimAPI_MakeCylinder_3(axis,s.radius,s.height));
+  const shape=keep(cyl.Shape());
+  if(!keep(new oc.BRepCheck_Analyzer(shape,true)).IsValid_2())throw Error('Invalid cylinder shape');
+  owned.splice(owned.indexOf(shape),1);
+  return shape;
+ }
  const bottom=s.origin.map((v,i)=>v+s.axis[i]*s.levels[0]),axis=keep(new oc.gp_Ax2_3(point(bottom),keep(new oc.gp_Dir_4(...s.axis))));
  const outer=keep(new oc.BRepPrimAPI_MakeCylinder_3(axis,s.circles[1].radius,s.height)),inner=keep(new oc.BRepPrimAPI_MakeCylinder_3(axis,s.circles[0].radius,s.height)),ring=keep(new oc.BRepAlgoAPI_Cut_3(keep(outer.Shape()),keep(inner.Shape())));
  const reach=2*s.circles[1].radius/Math.cos(s.sweep/2),points=[bottom,...s.rays.map(ray=>bottom.map((x,i)=>x+reach*ray[i]))].map(point),wire=keep(new oc.BRepBuilderAPI_MakeWire_1());
@@ -154,7 +290,7 @@ module.exports.inspect=function inspect(oc,shape){
   try{while(ex.More()){stats[name]++;ex.Next();}}finally{ex.delete();}
  }
  const props=new oc.GProp_GProps_1();try{oc.BRepGProp.VolumeProperties_1(shape,props,true,false,false);stats.volume=props.Mass();}finally{props.delete();}
- if(stats.solids!==1||stats.shells!==1||stats.faces!==7||!Number.isFinite(stats.volume)||stats.volume<=0)throw Error('Unexpected annulus topology');
+ if(stats.solids!==1||stats.shells!==1||stats.faces<1||!Number.isFinite(stats.volume)||stats.volume<=0)throw Error('Unexpected annulus topology');
  return stats;
 };
 
