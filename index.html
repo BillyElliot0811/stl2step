@@ -21,6 +21,22 @@
 <div class="eyebrow">Công cụ chuyển đổi CAD</div>
 <h1>Chuyển STL → STEP</h1>
 <p class="sub">Xử lý ngay trên máy bạn. Nội dung file không được tải lên máy chủ.</p>
+<nav id="stepper" class="stepper" aria-label="Các bước chuyển đổi">
+<div class="step" data-step="1" data-state="active" aria-current="step">
+<div class="step-badge"><span class="step-num">1</span></div>
+<div class="step-info"><span class="step-label">Bước 1</span><strong class="step-title">Tải file</strong></div>
+</div>
+<div class="step-connector" aria-hidden="true"></div>
+<div class="step" data-step="2" data-state="pending">
+<div class="step-badge"><span class="step-num">2</span></div>
+<div class="step-info"><span class="step-label">Bước 2</span><strong class="step-title">Chuyển đổi</strong></div>
+</div>
+<div class="step-connector" aria-hidden="true"></div>
+<div class="step" data-step="3" data-state="pending">
+<div class="step-badge"><span class="step-num">3</span></div>
+<div class="step-info"><span class="step-label">Bước 3</span><strong class="step-title">Kết quả</strong></div>
+</div>
+</nav>
 <div class="workspace">
 <section class="card" aria-label="Chuyển đổi file STL">
 <noscript><p>Cần bật JavaScript để sử dụng công cụ.</p></noscript>
@@ -57,7 +73,7 @@
 <section class="viewer" aria-label="Xem mô hình STL nguồn">
 <div class="viewer-head"><div><strong>Mô hình 3D</strong><span class="source-badge">STL nguồn</span></div><button id="fitView" class="secondary" type="button">Về giữa</button></div>
 <div class="viewport"><canvas id="modelCanvas" tabindex="0" aria-label="Mô hình STL: kéo để xoay, Shift kéo để di chuyển, cuộn để zoom; phím mũi tên xoay, cộng trừ zoom, F căn giữa"></canvas><p id="previewMessage">Chọn hoặc kéo file STL vào bảng bên trái để xem mô hình.</p></div>
-<div class="view-tools"><label>Góc nhìn <select id="cameraView"><option value="iso">Isometric</option><option value="front">Trước</option><option value="top">Trên</option><option value="right">Phải</option></select></label><label>Hiển thị <select id="renderMode"><option value="solid">Solid</option><option value="wire">Wireframe</option><option value="both">Solid + wireframe</option></select></label></div>
+<div class="view-tools"><label>Góc nhìn <select id="cameraView"><option value="iso">Isometric</option><option value="front">Trước</option><option value="top">Trên</option><option value="right">Phải</option></select></label><div class="view-mode-wrap"><span class="view-mode-title">Chế độ xem:</span><div class="view-buttons" role="group" aria-label="Chế độ hiển thị 3D"><button type="button" id="viewBoth" class="view-btn" data-mode="both" aria-pressed="false">Tô bóng có cạnh</button><button type="button" id="viewSolid" class="view-btn" data-mode="solid" aria-pressed="true">Tô bóng</button><button type="button" id="viewWire" class="view-btn" data-mode="wire" aria-pressed="false">Khung dây</button></div></div><select id="renderMode" hidden aria-hidden="true"><option value="solid">Solid</option><option value="wire">Wireframe</option><option value="both">Solid + wireframe</option></select></div>
 <p id="modelInfo">Chưa có mô hình</p><p class="hint viewer-help">Kéo để xoay · Shift/kéo phải để pan · Cuộn hoặc chụm để zoom<br>1 đơn vị STL = 1 mm. Preview nguồn không phải kết quả STEP.</p>
 </section>
 <aside class="result-panel" aria-label="Kết quả chuyển đổi"><h2>Kiểm tra &amp; kết quả</h2><div id="statusBox" data-tone="neutral" aria-busy="false">
