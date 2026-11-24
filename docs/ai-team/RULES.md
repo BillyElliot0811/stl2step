@@ -26,7 +26,7 @@ Một PR chỉ được bật auto-merge khi TẤT CẢ điều kiện sau đún
 
 ### Điều kiện kiểm thử
 7. Tất cả check-runs của head SHA là `success` (không có `failure`, `cancelled`, `timed_out`).
-8. Số ca passed ≥ số ca passed của `main` trước đó (không được giảm). Không có ca `skipped`.
+8. Số ca passed ≥ số ca chuẩn lưu trong `docs/ai-team/state.json`, trường `baseline_passed` (không được giảm). Sau mỗi PR merge xanh, n8n tự cập nhật trường này. Không có ca `skipped`.
 9. Dòng "KHỚP HOÀN TOÀN" của `compare-stl-parser.js` xuất hiện trong log CI.
 10. Không vượt `max_calls_per_day` trong `budget.json`.
 
@@ -35,16 +35,16 @@ Một PR chỉ được bật auto-merge khi TẤT CẢ điều kiện sau đún
 12. Health xanh: giữ PR đã merge, ghi vào sổ.
 13. Health đỏ lần 1: chạy lại sau 3 phút.
 14. Health đỏ lần 2: tạo PR revert commit vừa merge, auto-merge revert (revert được phép dù cổng trên chưa đầy đủ, vì quay về trạng thái đã biết là tốt). Ghi lý do vào ROADMAP.
-   - Bước này CHỈ bật sau khi lịch `schedule` đã chạy đều ít nhất 3 lần liên tiếp xanh.
+   - Bước này CHỈ được bật khi code đếm qua API GitHub: 3 lần gần nhất của workflow `health-check-pages` có `event=schedule` và đều `success`. Nếu chưa đủ thì giữ trạng thái tắt.
 
 ### Khi không đạt
 - Thất bại 3 vòng sửa cho một mục: ghi lý do vào Issue, đánh dấu mục "bỏ qua tạm" trong ROADMAP, chuyển mục khác. Không tự merge.
 - Không bao giờ bỏ qua test đỏ bằng cách sửa ngưỡng hoặc xóa ca.
 
 ### Tóm tắt sáng (gửi mỗi ngày 08:00, n8n tạo từ dữ liệu API, không từ AI)
+- n8n cập nhật MỘT issue cố định tiêu đề "Nhật ký tự động" lúc 08:00 mỗi ngày. Không dùng email hay Telegram.
 - Đã merge: danh sách PR, commit hash, link.
 - Bị bỏ qua: mục, số vòng, lý do (lấy từ log CI).
 - Health check 24 giờ: số lần xanh / đỏ.
 - Lượt AI đã dùng / trần ngày.
 - Cảnh báo: bất kỳ điều kiện 1–14 nào không đạt.
-- Kênh gửi: do bạn chọn (email hoặc Telegram).

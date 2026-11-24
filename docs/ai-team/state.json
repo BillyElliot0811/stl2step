@@ -3,5 +3,6 @@
   "round": 0,
   "calls_today": 0,
   "last_status": "idle",
-  "last_date": null
+  "last_date": null,
+  "baseline_passed": 11
 }
