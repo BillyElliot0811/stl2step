@@ -261,10 +261,12 @@
     const viewSolid = $('viewSolid');
     const viewWire = $('viewWire');
     const renderMode = $('renderMode');
+    const canvas = $('modelCanvas');
     if (!viewBoth || !viewSolid || !viewWire || !renderMode) return;
 
     function setViewMode(mode) {
       renderMode.value = mode;
+      if (canvas) canvas.dataset.renderMode = mode;
       renderMode.dispatchEvent(new Event('change'));
       viewBoth.setAttribute('aria-pressed', String(mode === 'both'));
       viewSolid.setAttribute('aria-pressed', String(mode === 'solid'));
@@ -274,6 +276,12 @@
     viewBoth.addEventListener('click', () => setViewMode('both'));
     viewSolid.addEventListener('click', () => setViewMode('solid'));
     viewWire.addEventListener('click', () => setViewMode('wire'));
+
+    const initialMode = renderMode.value || 'solid';
+    if (canvas) canvas.dataset.renderMode = initialMode;
+    viewBoth.setAttribute('aria-pressed', String(initialMode === 'both'));
+    viewSolid.setAttribute('aria-pressed', String(initialMode === 'solid'));
+    viewWire.setAttribute('aria-pressed', String(initialMode === 'wire'));
   }
 
   function repairOptions() {

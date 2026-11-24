@@ -72,13 +72,23 @@ test.describe('Giao diện stl2step: Luồng 3 bước (Stepper) & Nút chế đ
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'step3-result.png'), fullPage: true });
   });
 
-  test('Kiểm tra nút chuyển giữa 3 chế độ xem (tô bóng có cạnh, tô bóng, khung dây)', async ({ page }) => {
+  test('Sau khi chuyển cube.stl, kiểm tra nút chuyển giữa 3 chế độ xem đổi trạng thái render thật', async ({ page }) => {
     await page.goto('/');
 
-    // Tải file mô hình để hiển thị trên khung 3D
+    // 1. Tải cube.stl và bấm chuyển sang STEP
     await page.setInputFiles('#file', FIXTURE_PATH);
+    const goBtn = page.locator('#go');
+    await expect(goBtn).toBeEnabled({ timeout: 10000 });
+    await goBtn.click();
 
-    // Kiểm tra 3 nút chế độ xem
+    // Chờ quá trình chuyển đổi hoàn tất
+    const dlLink = page.locator('#dl');
+    await expect(dlLink).toBeVisible({ timeout: 90000 });
+
+    const canvas = page.locator('#modelCanvas');
+    await expect(canvas).toBeVisible();
+
+    // 3 nút chế độ xem
     const btnBoth = page.locator('#viewBoth');
     const btnSolid = page.locator('#viewSolid');
     const btnWire = page.locator('#viewWire');
@@ -91,22 +101,36 @@ test.describe('Giao diện stl2step: Luồng 3 bước (Stepper) & Nút chế đ
     await expect(btnSolid).toContainText('Tô bóng');
     await expect(btnWire).toContainText('Khung dây');
 
-    // Kiểm tra renderMode mặc định hoặc bấm chọn từng chế độ
-    // 1. Chế độ Tô bóng có cạnh
+    // Chế độ 1: Tô bóng có cạnh
     await btnBoth.click();
     await expect(btnBoth).toHaveAttribute('aria-pressed', 'true');
-    await page.locator('#modelCanvas').screenshot({ path: path.join(SCREENSHOT_DIR, 'view-shaded-edges.png') });
+    await expect(canvas).toHaveAttribute('data-render-mode', 'both');
+    await page.waitForTimeout(150);
+    const imgBoth = await canvas.screenshot();
+    fs.writeFileSync(path.join(SCREENSHOT_DIR, 'view-shaded-edges.png'), imgBoth);
 
-    // 2. Chế độ Tô bóng
+    // Chế độ 2: Chỉ tô bóng
     await btnSolid.click();
     await expect(btnSolid).toHaveAttribute('aria-pressed', 'true');
     await expect(btnBoth).toHaveAttribute('aria-pressed', 'false');
-    await page.locator('#modelCanvas').screenshot({ path: path.join(SCREENSHOT_DIR, 'view-shaded.png') });
+    await expect(canvas).toHaveAttribute('data-render-mode', 'solid');
+    await page.waitForTimeout(150);
+    const imgSolid = await canvas.screenshot();
+    fs.writeFileSync(path.join(SCREENSHOT_DIR, 'view-shaded.png'), imgSolid);
 
-    // 3. Chế độ Khung dây
+    // Chế độ 3: Khung dây
     await btnWire.click();
     await expect(btnWire).toHaveAttribute('aria-pressed', 'true');
     await expect(btnSolid).toHaveAttribute('aria-pressed', 'false');
-    await page.locator('#modelCanvas').screenshot({ path: path.join(SCREENSHOT_DIR, 'view-wireframe.png') });
+    await expect(canvas).toHaveAttribute('data-render-mode', 'wire');
+    await page.waitForTimeout(150);
+    const imgWire = await canvas.screenshot();
+    fs.writeFileSync(path.join(SCREENSHOT_DIR, 'view-wireframe.png'), imgWire);
+
+    // Chứng minh render thật thay đổi: cả 3 ảnh chụp canvas phải khác nhau từng cặp
+    console.log(`Dung lượng ảnh canvas render thật: both=${imgBoth.length} bytes, solid=${imgSolid.length} bytes, wire=${imgWire.length} bytes`);
+    expect(Buffer.compare(imgBoth, imgSolid)).not.toBe(0);
+    expect(Buffer.compare(imgBoth, imgWire)).not.toBe(0);
+    expect(Buffer.compare(imgSolid, imgWire)).not.toBe(0);
   });
 });
