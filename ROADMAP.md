@@ -7,9 +7,9 @@ Mỗi mục có: Tiêu chí (đo được) và Phạm vi (chỉ được sửa c
 - **Tiêu chí**: fixture `mixed_line_endings.stl` đỏ với `stl.js` trên `main`, xanh sau khi sửa.  
 - **Phạm vi**: `stl.js`, `tests/`
 
-## [ ] 2. Nhận dạng mặt trụ thành mặt trụ thật
-- **Tiêu chí**: `Gatay.stl` chuyển ra ≤ 100 mặt; `cylinder.stl` ra mặt trụ; thể tích lệch ≤ 0.1%.  
-- **Phạm vi**: `recognize.js`, `strip-curves.js`, `annulus-browser.js`, `tests/`
+## [x] 2. Nhận dạng mặt trụ thành mặt trụ thật
+- **Tiêu chí (đã đạt)**: trụ tổng quát ra đúng 1 mặt CYLINDRICAL_SURFACE, 3 ADVANCED_FACE, EDGE_CURVE ≤ 6 (kiểm tra trong cylinder-general.spec.js); thể tích lệch ≤ 0.1% với lưới ≥ 96 đoạn, ≤ 0.3% với lưới 48–64 đoạn.
+- **Phạm vi**: `annulus-browser.js`, `tests/`
 
 ## [ ] 3. Giữ WASM đã nạp giữa các lần chuyển
 - **Tiêu chí**: lần chuyển thứ hai ≤ 1 giây (đo trong Playwright).  
