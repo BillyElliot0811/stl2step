@@ -94,12 +94,21 @@ test.describe('Kiểm thử nhận dạng mặt trụ TỔNG QUÁT', () => {
       const cylRadiusMatch = stepContent.match(/CYLINDRICAL_SURFACE\s*\(\s*'[^']*'\s*,\s*#\d+\s*,\s*([-\d.eE]+)\s*\)/);
       expect(cylRadiusMatch).toBeTruthy();
       const rStep = parseFloat(cylRadiusMatch[1]);
-      const stepVolume = Math.PI * rStep * rStep * c.h;
+      const diameter = 2 * rStep;
 
-      // Độ lệch thể tích so với lưới gốc: <= 0.1%
-      const volDiff = Math.abs(stepVolume - meshVolume) / meshVolume;
-      console.log(`${c.filename}: meshVol=${meshVolume.toFixed(3)}, stepVol=${stepVolume.toFixed(3)}, volDiff=${(volDiff * 100).toFixed(4)}%`);
-      expect(volDiff).toBeLessThanOrEqual(0.001); // <= 0.1%
+      // Đo đường kính và bán kính thực trong file STEP: phải đúng 100% kích thước danh nghĩa (R=8.00 -> D=16.00 mm)
+      console.log(`${c.filename}: STEP Radius=${rStep.toFixed(3)} mm, Diameter=${diameter.toFixed(3)} mm (kỳ vọng: D=${(2*c.r).toFixed(2)} mm)`);
+      expect(Math.abs(rStep - c.r)).toBeLessThanOrEqual(0.001);
+      expect(Math.abs(diameter - 2 * c.r)).toBeLessThanOrEqual(0.001);
+
+      // Thể tích hình trụ tròn thật từ STEP
+      const stepVolume = Math.PI * rStep * rStep * c.h;
+      // Với lưới 48 đoạn nội tiếp, thể tích lưới đa giác nhỏ hơn thể tích hình trụ tròn đúng ~0.286%
+      const theoreticalRelDiff = (Math.PI - 24 * Math.sin(Math.PI / 24)) / (24 * Math.sin(Math.PI / 24));
+      const actualRelDiff = (stepVolume - meshVolume) / meshVolume;
+      console.log(`${c.filename}: meshVol=${meshVolume.toFixed(3)} mm3, stepVol=${stepVolume.toFixed(3)} mm3, chênh lệch thực tế=${(actualRelDiff * 100).toFixed(4)}% (lý thuyết hình học: ${(theoreticalRelDiff * 100).toFixed(4)}%)`);
+      expect(stepVolume).toBeGreaterThan(meshVolume);
+      expect(Math.abs(actualRelDiff - theoreticalRelDiff)).toBeLessThanOrEqual(0.0001);
     });
   }
 });

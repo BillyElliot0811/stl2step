@@ -230,17 +230,16 @@ function detectGeneralCylinder(triangles, tol){
  if(H<1e-4)return null;
 
  const baseCenter=add(refOrigin,add(add(mul(u,cX),mul(v,cY)),mul(axis,minZ)));
- const R_eff=Math.sqrt(meshVolume/(Math.PI*H));
 
  return {
   type:'cylinder',
   origin:baseCenter,
   axis,
-  radius:R_eff,
+  radius:R_geom,
   R_geom,
   height:H,
   meshVolume,
-  support:{type:'cylinder',radius:R_eff,height:H}
+  support:{type:'cylinder',radius:R_geom,height:H}
  };
 }
 
